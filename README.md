@@ -19,9 +19,7 @@ Based on these docs:
 There are three stages to the script depending on what requirements it detects.
 
 -   It will update the system and require a reboot to proceed, if required.
-
 -   If no reboot is required it will continue to install the build environment dependencies and exit unless a module was passed as an argument.
-
 -   If the run using a module argument like `all` it will start building `libtorrent-python-binding` or the specified module using `python3`.
 
 ## Help options
@@ -66,15 +64,15 @@ Using Docker
 -   Port `8112` for deluge installation.
 -   Built to `$HOME/bindings`
 
-#### All in one docker command
+#### All in one Ubuntu/Debian docker command
 
-**Note:** This command can be configured using flags top provide a specific outcome.
+**Note:** This command can be configured using flags top provide a specific outcome. Change `ubuntu:20.04` to `debian:stable` to use Debian.
 
 ```bash
 docker run -it -p 8112:8112 -v $HOME/bindings:/root ubuntu:20.04 /bin/bash -c 'cd && apt-get update && apt-get install -y curl && curl -sL git.io/gplibtorrent | bash -s all && bash'
 ```
 
-#### Optional - Setup Docker fist
+#### Optional - Setup Ubuntu/Debian Docker fist
 
 Optionally you could create and configure the docker first and then use the script from within the container.
 
@@ -82,7 +80,7 @@ Optionally you could create and configure the docker first and then use the scri
 docker run -it -p 8112:8112 -v $HOME/bindings:/root ubuntu:20.04 /bin/bash -c 'cd && apt-get update && apt-get install -y curl && bash'
 ```
 
-#### Optional - Download and run
+#### Optional - Download and run inside Ubuntu/Debian docker
 
 Now you can call commands from within the docker container.
 
@@ -109,7 +107,7 @@ Using Docker
 -   Port `8112` for deluge installation.
 -   Built to `$HOME/bindings`
 
-#### All in one docker command
+#### All in one Alpine docker command
 
 **Note:** This command can be configured using flags top provide a specific outcome.
 
@@ -117,7 +115,7 @@ Using Docker
 docker run -it -p 8112:8112 -v $HOME/bindings:/root alpine:3.12 /bin/ash -c 'cd && apk update && apk add bash curl && curl -sL git.io/mplibtorrent | bash -s all && ash'
 ```
 
-#### Optional - Setup Docker fist
+#### Optional - Setup Alpine Docker fist
 
 Optionally you could create and configure the docker first and then use the script from within the container.
 
@@ -125,7 +123,7 @@ Optionally you could create and configure the docker first and then use the scri
 docker run -it -p 8112:8112 -v $HOME/bindings:/root alpine:3.12 /bin/ash -c 'cd && apk update && apk add bash curl && ash'
 ```
 
-#### Optional - Download and run
+#### Optional - Download and run inside Alpine docker
 
 Now you can call commands from within the docker container.
 

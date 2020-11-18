@@ -16,7 +16,7 @@
 #
 # https://github.com/koalaman/shellcheck/wiki/SC2086 There are a few examples where this is exactly what I want to happen, like when expanding the curl proxy arguments.
 #
-# https://github.com/koalaman/shellcheck/wiki/SC1091 I am sourcing /etc/os-release for some variables. It's not availabel to shellcheck to source and it's a safe file so we can skip this
+# https://github.com/koalaman/shellcheck/wiki/SC1091 I am sourcing /etc/os-release for some variables. It's not available to shell check to source and it's a safe file so we can skip this
 #
 # Script Formatting - https://marketplace.visualstudio.com/items?itemName=foxundermoon.shell-format
 #
@@ -28,7 +28,7 @@ libtorrent_version='1.2' # Set this here so it is easy to see and change
 #
 unset PARAMS BUILD_DIR SKIP_DELETE GITHUB_TAG LIBTORRENT_GITHUB_TAG GIT_PROXY CURL_PROXY TEST_BUILD MODULES_TEST GET_NUMPY CRYPTO_TYPE # Make sure this array of variables is reset to null when the script is loaded.
 #
-## Colour me up Scotty #########################################################
+## Color me up Scotty #########################################################
 #
 cr="\e[31m" && clr="\e[91m" # [c]olor[r]ed     && [c]olor[l]ight[r]ed
 cg="\e[32m" && clg="\e[92m" # [c]olor[g]reen   && [c]olor[l]ight[g]reen
@@ -37,12 +37,12 @@ cb="\e[34m" && clb="\e[94m" # [c]olor[b]lue    && [c]olor[l]ight[b]lue
 cm="\e[35m" && clm="\e[95m" # [c]olor[m]agenta && [c]olor[l]ight[m]agenta
 cc="\e[36m" && clc="\e[96m" # [c]olor[c]yan    && [c]olor[l]ight[c]yan
 #
-tb="\e[1m" && td="\e[2m" && tu="\e[4m" && tn="\n" # [t]ext[b]old && [t]ext[d]im && [t]ext[u]undelined && [t]ext[n]ewline
+tb="\e[1m" && td="\e[2m" && tu="\e[4m" && tn="\n" # [t]ext[b]old && [t]ext[d]im && [t]ext[u]nderlined && [t]ext[n]ewline
 #
 cend="\e[0m" # [c]olor[end]
 #
 #####################################################################################################################################################
-# This function sets some compiler flags globally - b2 settings are set in the ~/user-config.jam - this is set in the installation_modules funtion
+# This function sets some compiler flags globally - b2 settings are set in the ~/user-config.jam - this is set in the installation_modules function
 #####################################################################################################################################################
 custom_flags_set() {
 	CXXFLAGS="-std=c++14 -fPIC"
@@ -60,7 +60,7 @@ curl() {
 	fi
 }
 #####################################################################################################################################################
-# This function sets the build and installation directory. If the argument -b is used to set a build dir that directory is set and used.
+# This function sets the build and installation directory. If the argument -b is used to set a build directory that directory is set and used.
 # If nothing is specified or the switch is not used it defaults to the hard-coded ~/libtorrent-python
 #####################################################################################################################################################
 set_build_directory() {
@@ -105,11 +105,11 @@ set_module_urls() {
 	elif [[ "$LIBTORRENT_GITHUB_TAG" = "lm_master" ]]; then
 		libtorrent_github_tag="RC_${libtorrent_version//./_}"
 	else
-		libtorrent_github_tag="$(grep -Eom1 "v$libtorrent_version.([0-9]{1,2})" <(curl https://github.com/arvidn/libtorrent/tags))"
+		libtorrent_github_tag="$(grep -Eom1 "v$libtorrent_version.([0-9]{1,2})" <(curl "https://github.com/arvidn/libtorrent/tags"))"
 	fi
 	#
 	ltconfig_version="$(grep -Eom1 "ltConfig-(.*).egg" <(curl "https://github.com/ratanakvlun/deluge-ltconfig/releases"))"
-	ltconfig_url="$(grep -Eom1 'ht(.*)ltConfig(.*)egg' <(curl https://api.github.com/repos/ratanakvlun/deluge-ltconfig/releases/latest))"
+	ltconfig_url="$(grep -Eom1 'ht(.*)ltConfig(.*)egg' <(curl "https://api.github.com/repos/ratanakvlun/deluge-ltconfig/releases/latest"))"
 }
 #####################################################################################################################################################
 # This function determines which crypto is default (openssl) and what to do if wolfssl is selected.
@@ -135,7 +135,7 @@ set_libtorrent_crypto() {
 	fi
 }
 #####################################################################################################################################################
-# This function sets some default values we use but whose values can be overriden by certain flags
+# This function sets some default values we use but whose values can be overridden by certain flags
 #####################################################################################################################################################
 set_default_values() {
 	DEBIAN_FRONTEND="noninteractive" TZ="Europe/London" # For docker deploys to not get prompted to set the timezone.
@@ -155,7 +155,7 @@ set_default_values() {
 	LIBTORRENT_INSTALL_MODULE="stage_module ${LIBTORRENT_INSTALL_DIR}" # We can define the libtorrent installation settings for the b2 command here.
 }
 #####################################################################################################################################################
-# This function detemines the default version of python and what to do if version 2 is selected as this changes the name of some applications.
+# This function determines the default version of python and what to do if version 2 is selected as this changes the name of some applications.
 #####################################################################################################################################################
 set_python_version() {
 	PYTHON_VERSION="${PYTHON_VERSION:-3}" # Set the correct binary call for python2/python3/pip/pip3 and so on
@@ -171,7 +171,7 @@ set_python_version() {
 	fi
 }
 #####################################################################################################################################################
-# This function will check for a list of defined dependencies from the REQUIRED_PKGS array. Apps like python3 and python2 are dynmically set
+# This function will check for a list of defined dependencies from the REQUIRED_PKGS array. Applications like python3 and python2 are dynamically set
 #####################################################################################################################################################
 check_dependencies() {
 	REQUIRED_PKGS=("bison" "curl" "build-essential" "pkg-config" "automake" "libtool" "git" "perl" "python${PYTHON_VERSION}" "python${PYTHON_VERSION}-dev" "python${PYTHON_VERSION/2/}-numpy" "${GET_PIP}") # Define our list of required core packages in an array.
@@ -236,7 +236,7 @@ check_dependencies() {
 	fi
 }
 #####################################################################################################################################################
-# This function allows you to test the compoiled libraries to make sure they work.
+# This function allows you to test the compiled libraries to make sure they work.
 #####################################################################################################################################################
 test_library_builds() {
 	if [[ "$TEST_BUILD" = 'yes' ]]; then
@@ -334,7 +334,7 @@ installation_modules() {
 	fi
 }
 #####################################################################################################################################################
-# This function will test to see if a Jamfil patch file exists via teh variable patches_github_url for the tag used.
+# This function will test to see if a Jamfile patch file exists via the variable patches_github_url for the tag used.
 #####################################################################################################################################################
 apply_patches() {
 	[[ -d "$install_dir/patches" ]] && rm -rf "$install_dir/patches"
@@ -456,7 +456,7 @@ delete_function() {
 	fi
 }
 #####################################################################################################################################################
-# This function sets the name of the applicaton to be used with the functions download_file/folder and delete_function
+# This function sets the name of the application to be used with the functions download_file/folder and delete_function
 #####################################################################################################################################################
 application_name() {
 	last_app_name="skip_$app_name"
@@ -818,7 +818,7 @@ else
 	application_skip
 fi
 #####################################################################################################################################################
-# libtorrent instal
+# libtorrent install
 #####################################################################################################################################################
 application_name libtorrent
 #
