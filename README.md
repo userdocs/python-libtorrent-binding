@@ -1,5 +1,8 @@
 # Introduction
 
+[![Codacy Badge](https://api.codacy.com/project/badge/Grade/1525607f572c4b0384cd66cc366e041b)](https://app.codacy.com/gh/userdocs/python-libtorrent-binding?utm_source=github.com&utm_medium=referral&utm_content=userdocs/python-libtorrent-binding&utm_campaign=Badge_Grade)
+
+
 This is a build script to create, and optionally install, `libtorrent.so` statically linked against `openssl`, libtorrent `1.1`, `1.2` or `2.0` and `boost-python`. `wolfssl` is available as an alternative to `openssl` when using libtorrent v2 onwards.
 
 This makes setting up `Deluge` + `libtorrent` + `ltconfig 2` an automated and reasonably quick installation by copy and pasting a few commands.
