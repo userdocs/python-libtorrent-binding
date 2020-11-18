@@ -90,7 +90,7 @@ curl -sL git.io/gplibtorrent | bash -s all
 
 **Note:** You can modify this part `bash -s all` in either method to customise the behaviour of the command. Refer to the help section above.
 
-#### Using script
+#### Using glibc script
 
 **Note:** You can do this from within a docker container as well.
 
@@ -133,7 +133,7 @@ curl -sL git.io/mplibtorrent | bash -s all
 
 **Note:** You can modify this part `bash -s all` in either method to customise the behaviour of the command. Refer to the help section above.
 
-#### Using script
+#### Using musl script
 
 **Note:** You can do this from within a docker container as well.
 
