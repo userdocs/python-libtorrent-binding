@@ -1,7 +1,7 @@
 # Introduction
 
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/1525607f572c4b0384cd66cc366e041b)](https://app.codacy.com/gh/userdocs/python-libtorrent-binding?utm_source=github.com&utm_medium=referral&utm_content=userdocs/python-libtorrent-binding&utm_campaign=Badge_Grade)
-
+[![CodeFactor](https://www.codefactor.io/repository/github/userdocs/python-libtorrent-binding/badge)](https://www.codefactor.io/repository/github/userdocs/python-libtorrent-binding)
 
 This is a build script to create, and optionally install, `libtorrent.so` statically linked against `openssl`, libtorrent `1.1`, `1.2` or `2.0` and `boost-python`. `wolfssl` is available as an alternative to `openssl` when using libtorrent v2 onwards.
 
