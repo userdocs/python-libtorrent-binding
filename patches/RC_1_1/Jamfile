@@ -54,10 +54,10 @@ rule find-py3-version
 if $(BOOST_ROOT)
 {
 	use-project /boost : $(BOOST_ROOT) ;
-	alias boost_python : /boost/python//boost_python : : : <include>$(BOOST_ROOT) ;
+	alias boost_python : /boost/python : : : <include>$(BOOST_ROOT) ;
 	if [ find-py3-version ]
 	{
-		alias boost_python3 : /boost/python//boost_python3 : : : <include>$(BOOST_ROOT) ;
+		alias boost_python3 : /boost/python : : : <include>$(BOOST_ROOT) ;
 	}
 	else
 	{
@@ -221,7 +221,7 @@ my-python-extension libtorrent
   : # usage-requirements
     <suppress-import-lib>false
   ;
-  
+
 rule python-install-dir ( properties * )
 {
 	local install-dir = [ feature.get-values python-install-path : $(properties) ] ;
@@ -257,7 +257,7 @@ rule python-install-dir ( properties * )
 	ECHO "python install directory:" $(python-path) ;
 	return <location>$(python-path) ;
 }
-  
+
 install install_module
 	: libtorrent
 	: <conditional>@python-install-dir
