@@ -359,10 +359,10 @@ apply_patches() {
 # This function installs deluge and lt-config locally
 #####################################################################################################################################################
 install_deluge() {
-	[[ -z "$GET_PIP" ]] && {
+	if ! type "pip${PYTHON_VERSION}" > /dev/null 2>&1; then
 		echo -e "No pip available for this version of python on this OS${tn}"
 		exit
-	}
+	fi
 	#
 	mkdir -p "$HOME/.config/deluge/plugins"
 	curl "$ltconfig_url" -o "$HOME/.config/deluge/plugins/$ltconfig_version"
