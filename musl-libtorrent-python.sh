@@ -92,10 +92,11 @@ set_module_urls() {
 	wolfssl_github_tag="$(grep -Eom1 'v([0-9.]+?)-stable' <(curl "https://github.com/wolfSSL/wolfssl/tags"))"
 	wolfssl_github_url="https://github.com/wolfSSL/wolfssl.git"
 	#
-	boost_version="$(sed -rn 's#(.*)e">Version (.*\.[0-9]{1,2})</s(.*)#\2#p' <(curl "https://www.boost.org/users/download/"))"
-	boost_github_tag="boost-$boost_version"
-	boost_url="https://dl.bintray.com/boostorg/release/$boost_version/source/boost_${boost_version//./_}.tar.gz"
-	boost_url_status="$(curl -o /dev/null --silent --head --write-out '%{http_code}' "https://dl.bintray.com/boostorg/release/${boost_version}/source/boost_${boost_version//./_}.tar.gz")"
+	boost_version="$(grep -Eom1 '1.(.*).0$' <(curl -sNL "https://github.com/boostorg/boost/tags"))"
+	[[ "$LIBTORRENT_GITHUB_TAG" =~ (libtorrent-1_1_*|RC_1_1) ]] && boost_version="1.76.0"
+	boost_github_tag="boost-${boost_version}"
+	boost_url="https://boostorg.jfrog.io/artifactory/main/release/${boost_version}/source/boost_${boost_version//./_}.tar.gz"
+	boost_url_status="$(curl -so /dev/null --head --write-out '%{http_code}' "https://boostorg.jfrog.io/artifactory/main/release/${boost_version}/source/boost_${boost_version//./_}.tar.gz")"
 	boost_github_url="https://github.com/boostorg/boost.git"
 	#
 	libtorrent_github_url="https://github.com/arvidn/libtorrent.git"
@@ -160,7 +161,7 @@ set_default_values() {
 set_python_version() {
 	PYTHON_VERSION="${PYTHON_VERSION:-3}" # Set the correct binary call for python2/python3/pip/pip3 and so on
 	#
-	[[ "$LIBTORRENT_GITHUB_TAG" =~ (libtorrent-1_1_*|RC_1_1) ]] && PYTHON_VERSION="2"
+	[[ "$LIBTORRENT_GITHUB_TAG" =~ (libtorrent-1_1_*|RC_1_1) ]] PYTHON_VERSION="${PYTHON_VERSION:-2}"
 	#
 	if [[ "$PYTHON_VERSION" = "2" ]]; then
 		PYTHON_VERSION="2"
