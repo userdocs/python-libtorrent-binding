@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# https://git.io/JXDqe
+# https://git.io/JXDOJ
 #
 # shellcheck disable=SC1091
 #
-# docker run -it -w /root -e "LANG=en_GB.UTF-8" -v $HOME/build:/root ubuntu:bionic /bin/bash -c 'apt update && apt install -y curl && curl -sL git.io/JXDqe | bash -s boost_v=76 build_d=yes libtorrent_b= cxxstd=14 libtorrent= python_b= python_v= lto=on'
+# docker run -it -w /root -e "LANG=en_GB.UTF-8" -v $HOME/build:/root ubuntu:bionic /bin/bash -c 'apt update && apt install -y curl && curl -sL git.io/JXDOJ | bash -s boost_v=76 build_d=yes libtorrent_b= cxxstd=14 libtorrent= python_b= python_v= lto=on'
 #
 # ./build-libtorrent.sh boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto=
 #
