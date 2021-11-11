@@ -45,7 +45,7 @@ cend="\e[0m" # [c]olor[end]
 # This function sets some compiler flags globally - b2 settings are set in the ~/user-config.jam - this is set in the installation_modules function
 #####################################################################################################################################################
 custom_flags_set() {
-	CXXFLAGS="-std=c++14 -fPIC"
+	CXXFLAGS="-std=c++${cxxstd:-17} -fPIC"
 	CPPFLAGS="-I$include_dir"
 	LDFLAGS="-L$lib_dir"
 }
@@ -86,8 +86,8 @@ set_build_directory() {
 # This function is where we set your URL that we use with other functions.
 #####################################################################################################################################################
 set_module_urls() {
-	openssl_github_tag="$(grep -Eom1 'OpenSSL_1_1_([0-9][a-z])' <(curl "https://github.com/openssl/openssl/tags"))"
-	openssl_url="https://github.com/openssl/openssl/archive/$openssl_github_tag.tar.gz"
+	openssl_github_tag="$(git ls-remote -q -t --refs https://github.com/openssl/openssl.git | awk '/openssl/{sub("refs/tags/", "");sub("(.*)(v6|rc|alpha|beta)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n1)"
+	openssl_url="https://github.com/openssl/openssl/archive/${openssl_github_tag}.tar.gz"
 	#
 	wolfssl_github_tag="$(grep -Eom1 'v([0-9.]+?)-stable' <(curl "https://github.com/wolfSSL/wolfssl/tags"))"
 	wolfssl_github_url="https://github.com/wolfSSL/wolfssl.git"
@@ -320,7 +320,7 @@ installation_modules() {
 		python_short_version="${python_major}.${python_minor}"
 		python_link_version="${python_major}${python_minor}"
 		#
-		echo -e "using gcc : : : <cxxflags>-std=c++14 ;${tn}using python : ${python_short_version} : /usr/bin/python${python_short_version} : /usr/include/python${python_short_version} : /usr/lib/python${python_short_version} ;" > "$HOME/user-config.jam"
+		echo -e "using gcc : : : <cxxflags>-std=c++${cxxstd:-17} ;${tn}using python : ${python_short_version} : /usr/bin/python${python_short_version} : /usr/include/python${python_short_version} : /usr/lib/python${python_short_version} ;" > "$HOME/user-config.jam"
 		#
 		## Echo the build directory.
 		echo -e "${tn}${tb}Install Prefix${cend} : ${cg}$install_dir${cend}"
@@ -838,7 +838,7 @@ if [[ "${!app_name_skip:-yes}" = 'no' ]] || [[ "$1" = "$app_name" ]]; then
 		#
 		cd "$folder_name/bindings/python"
 		#
-		"$install_dir/boost/b2" -j"$(nproc)" ${LIBTORRENT_CRYPTO} address-model="$(getconf LONG_BIT)" fpic=on dht=on encryption=on i2p=on extensions=on variant=release threading=multi libtorrent-link=static boost-link=static cxxflags="$CXXFLAGS" cflags="$CPPFLAGS" linkflags="$LDFLAGS" ${LIBTORRENT_INSTALL_MODULE} 2>&1 | tee "$install_dir/logs/libtorrent.log.txt"
+		"$install_dir/boost/b2" -j"$(nproc)" ${LIBTORRENT_CRYPTO} address-model="$(getconf LONG_BIT)" cxxstd="${cxxstd:-17}" lto=on fpic=on dht=on encryption=on i2p=on extensions=on variant=release threading=multi libtorrent-link=static boost-link=static cxxflags="$CXXFLAGS" cflags="$CPPFLAGS" linkflags="$LDFLAGS" ${LIBTORRENT_INSTALL_MODULE} 2>&1 | tee "$install_dir/logs/libtorrent.log.txt"
 		#
 		[[ -f "$install_dir/libtorrent/bindings/python/libtorrent.so" ]] && cp "$install_dir/libtorrent/bindings/python/libtorrent.so" "$install_dir/completed/libtorrent.so"
 		#
