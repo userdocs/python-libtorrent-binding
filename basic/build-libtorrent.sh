@@ -51,7 +51,7 @@ if [[ "$(id -un)" = 'root' ]]; then
 	printf '\n%s\n\n' "${green} Update env and install core deps${end}"
 	apt-get update
 	apt-get upgrade -y
-	apt-get install -y build-essential curl pkg-config git perl "${python_v}" "${python_v}-dev" zlib1g-dev libssl-dev # install the deps
+	apt-get install -y build-essential dh-autoreconf curl pkg-config git perl "${python_v}" "${python_v}-dev" zlib1g-dev libssl-dev dh-autoreconf # install the deps
 fi
 #
 printf '\n%s\n\n' "${green} Values being used:${end}"
