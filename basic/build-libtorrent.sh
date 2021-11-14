@@ -44,17 +44,18 @@ CXXFLAGS="-std=c++${cxxstd:-17} -fPIC" # Set some basic CXXFLAGS
 #
 if [[ "$(id -un)" = 'root' ]]; then
 	printf '\n%s\n\n' "${green} Update env and install core deps${end}"
-	DEBIAN_FRONTEND="noninteractive" # docker specific env
-	TZ="Europe/London"               # docker specific env
+	DEBIAN_FRONTEND="noninteractive"
+	TZ="Europe/London"
 	#
 	apt-get update
 	apt-get upgrade -y
 	#
 	printf '%s\n' "LC_ALL=en_GB.UTF-8" "LANG=en_GB.UTF-8" "LANGUAGE=en_GB.UTF-8" > /etc/default/locale
 	source /etc/default/locale
+	#
 	apt-get install -y locales
 	sed 's|# en_GB.UTF-8 UTF-8|en_GB.UTF-8 UTF-8|g' -i /etc/locale.gen
-	/usr/sbin/locale-gen
+	locale-gen
 	#
 	apt-get install -y build-essential dh-autoreconf curl pkg-config git perl "${python_v}" "${python_v}-dev" zlib1g-dev libssl-dev dh-autoreconf # install the deps
 fi
@@ -141,10 +142,4 @@ if [[ "${python_b}" == yes ]]; then
 	printf '%s\n\n' "${green} Python binding version is: ${cyan}$("${python_v}" -c "import libtorrent; print(libtorrent.version)")${end}"
 else
 	printf '%s\n\n' "${yellow} Skipping libtorrent python binding${end}"
-fi
-#
-read -rep "Do you want to stay in the container [y] or exit [n]: " -i "y" CSTAY
-#
-if [[ "${CSTAY}" == 'y' ]]; then
-	bash
 fi
