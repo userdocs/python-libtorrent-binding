@@ -20,7 +20,7 @@ cyan="$(tput setaf 6)"
 end="$(tput sgr0)"
 #
 for setting in "${@}"; do
-	"${setting?}"
+	export "${setting?}"
 done
 #
 [[ -z "${python_v}" ]] && python_v="python3"
@@ -48,11 +48,12 @@ CXXFLAGS="-std=c++${cxxstd:-17} -fPIC" # Set some basic CXXFLAGS
 #
 [[ -n "${lto}" ]] && lto="lto=on" || lto="" # set values for boost the build dir and the liborrent branch - default is null . On or null are the options
 #
-printf '\n%s\n\n' "${green} Update env and install core deps${end}"
-#
-apt-get update
-apt-get upgrade -y
-apt-get install -y build-essential curl pkg-config git perl "${python_v}" "${python_v}-dev" zlib1g-dev libssl-dev # install the deps
+if [[ "$(id -un)" = 'root' ]]; then
+	printf '\n%s\n\n' "${green} Update env and install core deps${end}"
+	apt-get update
+	apt-get upgrade -y
+	apt-get install -y build-essential curl pkg-config git perl "${python_v}" "${python_v}-dev" zlib1g-dev libssl-dev # install the deps
+fi
 #
 printf '\n%s\n\n' "${green} Values being used ${cyan}:${yellow} Boost version = 1.${boost_v}.0 ${cyan}:${yellow} build dir = ${build_d} ${cyan}:${yellow} libtorrent branch = ${libtorrent_b} ${cyan}:${yellow} CXX standard = ${cxxstd} ${cyan}:${yellow} libtorrent=${libtorrent} ${cyan}:${yellow} python_b=${python_b} ${cyan}:${yellow} python_v=$("${python_v}" -c "import sys; print(sys.version_info[0])") ${cyan}:${yellow} ${lto:-lto=off} ${cyan}:${yellow} crypto=${crypto} ${end}"
 #
