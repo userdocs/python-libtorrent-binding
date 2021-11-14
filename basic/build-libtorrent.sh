@@ -32,7 +32,6 @@ done
 #
 LANG="en_GB.UTF-8"                     # docker specific env
 LANGUAGE="en_GB.UTF-8"                 # docker specific env
-LC_ALL="en_GB.UTF-8"                   # docker specific env
 DEBIAN_FRONTEND="noninteractive"       # docker specific env
 TZ="Europe/London"                     # docker specific env
 boost_v="${boost_v:-77}"               # set the boost version using just 74/75/76/77
@@ -46,7 +45,7 @@ python_v="${python_v:-python_v}"       # set the python version 2/3 - default is
 crypto="${crypto:-openssl}"            # set wolfssl as alternative to opensll (default)
 CXXFLAGS="-std=c++${cxxstd:-17} -fPIC" # Set some basic CXXFLAGS
 #
-[[ -n "${lto}" ]] && lto="lto=on" || lto="" # set values for boost the build dir and the liborrent branch - default is null . On or null are the options
+[[ -n "${lto}" ]] && lto="lto=${yellow}on" || lto="" # set values for boost the build dir and the liborrent branch - default is null . On or null are the options
 #
 if [[ "$(id -un)" = 'root' ]]; then
 	printf '\n%s\n\n' "${green} Update env and install core deps${end}"
@@ -55,7 +54,16 @@ if [[ "$(id -un)" = 'root' ]]; then
 	apt-get install -y build-essential curl pkg-config git perl "${python_v}" "${python_v}-dev" zlib1g-dev libssl-dev # install the deps
 fi
 #
-printf '\n%s\n\n' "${green} Values being used ${cyan}:${yellow} Boost version = 1.${boost_v}.0 ${cyan}:${yellow} build dir = ${build_d} ${cyan}:${yellow} libtorrent branch = ${libtorrent_b} ${cyan}:${yellow} CXX standard = ${cxxstd} ${cyan}:${yellow} libtorrent=${libtorrent} ${cyan}:${yellow} python_b=${python_b} ${cyan}:${yellow} python_v=$("${python_v}" -c "import sys; print(sys.version_info[0])") ${cyan}:${yellow} ${lto:-lto=off} ${cyan}:${yellow} crypto=${crypto} ${end}"
+printf '\n%s\n\n' "${green} Values being used:${end}"
+printf '%s\n\n' " boost_v=${yellow}1.${boost_v}.0${end}"
+printf '%s\n\n' " build_d=${yellow}${build_d}${end}"
+printf '%s\n\n' " libtorrent_b=${yellow}${libtorrent_b}${end}"
+printf '%s\n\n' " cxxstd=${yellow}${cxxstd}${end}"
+printf '%s\n\n' " libtorrent=${yellow}${libtorrent}${end}"
+printf '%s\n\n' " python_b=${yellow}${python_b}${end}"
+printf '%s\n\n' " python_v=${yellow}$("${python_v}" -c "import sys; print(sys.version_info[0])")${end}"
+printf '%s\n\n' " ${lto:-lto=${yellow}off}${end}"
+printf '%s\n\n' " crypto=${yellow}${crypto} ${end}${end}"
 #
 if [[ "${crypto}" == 'wolfssl' ]]; then
 	printf '%s\n\n' "${green} Download and bootstrap ${magenta}wolfssl${end}"
