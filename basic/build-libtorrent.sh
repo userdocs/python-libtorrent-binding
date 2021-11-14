@@ -30,6 +30,7 @@ done
 #
 ## Defaults are set here
 #
+[[ "$(id -un)" = 'root' ]] && LC_ALL="en_GB.UTF-8"
 LANG="en_GB.UTF-8"                     # docker specific env
 LANGUAGE="en_GB.UTF-8"                 # docker specific env
 DEBIAN_FRONTEND="noninteractive"       # docker specific env
@@ -68,6 +69,7 @@ printf '%s\n\n' " crypto=${yellow}${crypto} ${end}${end}"
 if [[ "${crypto}" == 'wolfssl' ]]; then
 	printf '%s\n\n' "${green} Download and bootstrap ${magenta}wolfssl${end}"
 	wolfssl_github_tag="$(grep -Eom1 'v([0-9.]+?)-stable$' <(curl -sL "https://github.com/wolfSSL/wolfssl/tags"))"
+	[[ -d "${build_d}/wolfssl" ]] && rm -rf "${build_d}/wolfssl"
 	git clone --no-tags --single-branch --branch "${wolfssl_github_tag}" --shallow-submodules --recurse-submodules --depth 1 "https://github.com/wolfSSL/wolfssl.git" "${build_d}/wolfssl"
 	cd "${build_d}/wolfssl" || exit
 	./autogen.sh
@@ -123,6 +125,9 @@ if [[ "${python_b}" == yes ]]; then
 	echo "using python : ${python_major}.${python_minor} : /usr/bin/python${python_major}.${python_minor} : /usr/include/python${python_major}.${python_minor} : /usr/lib/python${python_major}.${python_minor} ;" >> "$HOME/user-config.jam"
 	#
 	cd "${build_d}/libtorrent/bindings/python" || exit
+	#
+	printf '%s\n\n' "${green} Patch ${cyan}bindings/python/src/torrent_info.cpp${end}"
+	sed 's|protocol_version|lt::protocol_version|g' -i src/torrent_info.cpp
 	#
 	printf '%s\n\n' "${green} Build libtorrent ${libtorrent_b} pything bindings${end}"
 	#
