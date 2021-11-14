@@ -2,11 +2,13 @@
 #
 # https://git.io/JXDOJ
 #
-# shellcheck disable=SC1091
+# shellcheck disable=SC1091,SC2034
 #
 # docker run -it -w /root -e "LANG=en_GB.UTF-8" -v $HOME/build:/root ubuntu:bionic /bin/bash -c 'apt update && apt install -y curl && curl -sL git.io/JXDOJ | bash -s boost_v=76 build_d=yes libtorrent_b= cxxstd=14 libtorrent= python_b= python_v= lto=on'
 #
 # ./build-libtorrent.sh boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto= crypto=
+#
+set -a
 #
 #  If these are unset they default
 #
@@ -18,7 +20,7 @@ cyan="$(tput setaf 6)"
 end="$(tput sgr0)"
 #
 for setting in "${@}"; do
-	export "${setting?}"
+	"${setting?}"
 done
 #
 [[ -z "${python_v}" ]] && python_v="python3"
@@ -27,6 +29,10 @@ done
 [[ "$(source /etc/os-release && printf '%s' "$VERSION_CODENAME")" =~ (stretch|bionic) && "${python_v}" == 'python2' ]] && python_v="python"
 #
 ## Defaults are set here
+#
+LANG="en_GB.UTF-8"                     # docker specific env
+DEBIAN_FRONTEND="noninteractive"       # docker specific env
+TZ="Europe/London"                     # docker specific env
 boost_v="${boost_v:-77}"               # set the boost version using just 74/75/76/77
 build_d="$(pwd)/${build_d:-lt-build}"  # set the build directory - default is 3 lt-build relative to the container /root
 install_d="${build_d}-completed"       # set the completed directory based of the build dir name
