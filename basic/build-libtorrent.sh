@@ -31,6 +31,8 @@ done
 ## Defaults are set here
 #
 LANG="en_GB.UTF-8"                     # docker specific env
+LANGUAGE="en_GB.UTF-8"                 # docker specific env
+LC_ALL="en_GB.UTF-8"                   # docker specific env
 DEBIAN_FRONTEND="noninteractive"       # docker specific env
 TZ="Europe/London"                     # docker specific env
 boost_v="${boost_v:-77}"               # set the boost version using just 74/75/76/77
