@@ -4,7 +4,7 @@
 #
 # shellcheck disable=SC1091,SC2034
 #
-# docker run -it -w /root -v ~/build:/root ubuntu:focal /bin/bash -c 'apt update && apt install -y curl && curl -sL git.io/JXDOJ  | bash -s boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto= crypto='
+# docker run -it -w /root -v ~/build:/root ubuntu:focal /bin/bash -c 'apt update && apt install -y curl && curl -sL git.io/JXDOJ | bash -s boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto= crypto='
 #
 # ./build-libtorrent.sh boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto= crypto=
 #
@@ -29,12 +29,6 @@ done
 [[ "$(source /etc/os-release && printf '%s' "$VERSION_CODENAME")" =~ (stretch|bionic) && "${python_v}" == 'python2' ]] && python_v="python"
 #
 ## Defaults are set here
-#
-[[ "$(id -un)" = 'root' ]] && LC_ALL="en_GB.UTF-8"
-LANG="en_GB.UTF-8"                     # docker specific env
-LANGUAGE="en_GB.UTF-8"                 # docker specific env
-DEBIAN_FRONTEND="noninteractive"       # docker specific env
-TZ="Europe/London"                     # docker specific env
 boost_v="${boost_v:-77}"               # set the boost version using just 74/75/76/77
 build_d="$(pwd)/${build_d:-lt-build}"  # set the build directory - default is 3 lt-build relative to the container /root
 install_d="${build_d}-completed"       # set the completed directory based of the build dir name
@@ -50,8 +44,18 @@ CXXFLAGS="-std=c++${cxxstd:-17} -fPIC" # Set some basic CXXFLAGS
 #
 if [[ "$(id -un)" = 'root' ]]; then
 	printf '\n%s\n\n' "${green} Update env and install core deps${end}"
+	DEBIAN_FRONTEND="noninteractive" # docker specific env
+	TZ="Europe/London"               # docker specific env
+	#
 	apt-get update
 	apt-get upgrade -y
+	#
+	printf '%s\n' "LC_ALL=en_GB.UTF-8" "LANG=en_GB.UTF-8" "LANGUAGE=en_GB.UTF-8" > /etc/default/locale
+	source /etc/default/locale
+	apt-get install -y locales
+	sed 's|# en_GB.UTF-8 UTF-8|en_GB.UTF-8 UTF-8|g' -i /etc/locale.gen
+	/usr/sbin/locale-gen
+	#
 	apt-get install -y build-essential dh-autoreconf curl pkg-config git perl "${python_v}" "${python_v}-dev" zlib1g-dev libssl-dev dh-autoreconf # install the deps
 fi
 #
