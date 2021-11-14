@@ -4,7 +4,7 @@
 #
 # shellcheck disable=SC1091,SC2034
 #
-# docker run -it -w /root -e "LANG=en_GB.UTF-8" -v $HOME/build:/root ubuntu:bionic /bin/bash -c 'apt update && apt install -y curl && curl -sL git.io/JXDOJ | bash -s boost_v=76 build_d=yes libtorrent_b= cxxstd=14 libtorrent= python_b= python_v= lto=on'
+# docker run -it -w /root -v ~/build:/root ubuntu:focal /bin/bash -c 'apt update && apt install -y curl && curl -sL git.io/JXDOJ  | bash -s boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto= crypto='
 #
 # ./build-libtorrent.sh boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto= crypto=
 #
@@ -80,7 +80,7 @@ else
 	printf '%s\n' "${yellow} Skipping - we have already downloaded: ${magenta}boost_1_${boost_v}_0${end}"
 fi
 #
-printf '\n%s\n\n' "${green} Configure BOOST_BUILD_PATH to locate our headers${end}"
+printf '\n%s\n\n' "${green} Configure ${cyan}BOOST_BUILD_PATH ${green}to locate our headers${end}"
 #
 export BOOST_BUILD_PATH="${build_d}/boost_1_${boost_v}_0" # once boost is bootstrapped and b2 is built you only need to set this for b2 + libtorrent.
 #
