@@ -125,3 +125,9 @@ if [[ "${python_b}" == yes ]]; then
 else
 	printf '%s\n\n' "${yellow} Skipping libtorrent python binding${end}"
 fi
+#
+read -rep "Do you want to stay in the container [y] or exit [n]: " -i "y" CSTAY
+#
+if [[ "${CSTAY}" == 'y' ]]; then
+	bash
+fi
