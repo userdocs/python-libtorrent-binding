@@ -4,9 +4,9 @@
 #
 # shellcheck disable=SC1091,SC2034
 #
-# docker run -it -w /root -v ~/build:/root ubuntu:focal /bin/bash -c 'apt update && apt install -y curl && curl -sL git.io/JXDOJ | bash -s boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto= crypto='
+# docker run -it -w /root -v ~/build:/root ubuntu:focal /bin/bash -c 'apt update && apt install -y curl && curl -sL git.io/JXDOJ | bash -s boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto= crypto= system_crypto='
 #
-# ./build-libtorrent.sh boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto= crypto=
+# ./build-libtorrent.sh boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto= crypto= system_crypto=
 #
 set -a
 #
@@ -38,8 +38,9 @@ libtorrent=${libtorrent:-yes}          # built libtorrent yes/no - default is ye
 python_b="${python_b:-yes}"            # build the python binding yes/no - default is yes
 python_v="${python_v:-python_v}"       # set the python version 2/3 - default is 3
 crypto="${crypto:-openssl}"            # set wolfssl as alternative to opensll (default)
+system_crypto="${system_crypto:-no}"   # use system libs [yes] or git ltest release [no]
 CXXFLAGS="-std=c++${cxxstd:-17} -fPIC" # Set some basic CXXFLAGS
-#
+
 [[ -n "${lto}" ]] && lto="lto=on" || lto="" # set values for boost the build dir and the liborrent branch - default is null . On or null are the options
 #
 if [[ "$(id -un)" = 'root' ]]; then
@@ -59,7 +60,7 @@ if [[ "$(id -un)" = 'root' ]]; then
 	#
 	apt-get install -y build-essential dh-autoreconf curl pkg-config git perl "${python_v}" "${python_v}-dev" zlib1g-dev libssl-dev dh-autoreconf # install the deps
 fi
-#
+
 printf '\n%s\n\n' "${green} Values being used:${end}"
 printf '%s\n\n' " boost_v=1.${boost_v}.0${end}"
 printf '%s\n\n' " build_d=${build_d}${end}"
@@ -70,23 +71,43 @@ printf '%s\n\n' " python_b=${python_b}${end}"
 printf '%s\n\n' " python_v=$("${python_v}" -c "import sys; print(sys.version_info[0])")${end}"
 printf '%s\n\n' " ${lto:-lto=off}${end}"
 printf '%s\n\n' " crypto=${crypto} ${end}${end}"
-#
-if [[ "${crypto}" == 'wolfssl' ]]; then
+printf '%s\n\n' " system_crypto=${system_crypto} ${end}${end}"
+
+if [[ "${crypto}" == 'wolfssl' && "${system_crypto}" == 'no' ]]; then
 	printf '%s\n\n' "${green} Download and bootstrap ${magenta}wolfssl${end}"
-	wolfssl_github_tag="$(grep -Eom1 'v([0-9.]+?)-stable$' <(curl -sL "https://github.com/wolfSSL/wolfssl/tags"))"
+	wolfssl_github_tag="${wolfssl_github_tag:-$(grep -Eom1 'v([0-9.]+?)-stable$' <(curl -sL "https://github.com/wolfSSL/wolfssl/tags"))}"
 	[[ -d "${build_d}/wolfssl" ]] && rm -rf "${build_d}/wolfssl"
 	git clone --no-tags --single-branch --branch "${wolfssl_github_tag}" --shallow-submodules --recurse-submodules --depth 1 "https://github.com/wolfSSL/wolfssl.git" "${build_d}/wolfssl"
 	cd "${build_d}/wolfssl" || exit
 	./autogen.sh
 	./configure --enable-static --disable-shared --enable-asio --enable-sni --enable-nginx CXXFLAGS="$CXXFLAGS"
 	make -j"$(nproc)"
-	crypto=("crypto=wolfssl" "wolfssl-lib=${build_d}/wolfssl/src/.libs" "wolfssl-include=${build_d}/wolfssl")
+	crypto_array=("crypto=wolfssl" "wolfssl-lib=${build_d}/wolfssl/src/.libs" "wolfssl-include=${build_d}/wolfssl")
 	printf '\n%s\n\n' "${green} Download and bootstrap ${magenta}boost_1_${boost_v}_0${end}"
-else
-	crypto=("crypto=openssl")
+fi
+
+if [[ "${crypto}" == 'wolfssl' && "${system_crypto}" == 'yes' ]]; then
+	crypto_array=("crypto=wolfssl" "wolfssl-include=/usr/include" "wolfssl-lib/usr/lib/$(arch)-linux-gnu")
 	printf '%s\n\n' "${green} Download and bootstrap ${magenta}boost_1_${boost_v}_0${end}"
 fi
-#
+
+if [[ "${crypto}" == 'openssl' && "${system_crypto}" == 'no' ]]; then
+	printf '%s\n\n' "${green} Download and bootstrap ${magenta}openssl${end}"
+	openssl_github_tag="${openssl_github_tag:-$(git ls-remote -q -t --refs https://github.com/openssl/openssl.git | awk '/openssl/{sub("refs/tags/", "");sub("(.*)(v6|rc|alpha|beta)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n1)}"
+	[[ -d "${build_d}/openssl" ]] && rm -rf "${build_d}/openssl"
+	git clone --no-tags --single-branch --branch "${openssl_github_tag}" --shallow-submodules --recurse-submodules --depth 1 "https://github.com/openssl/openssl" "${build_d}/openssl"
+	cd "${build_d}/openssl" || exit
+	./config --prefix="${build_d}" --openssldir="/etc/ssl" threads no-shared no-dso no-comp CXXFLAGS="$CXXFLAGS"
+	make -j"$(nproc)"
+	crypto_array=("crypto=openssl" "openssl-lib=${build_d}/openssl" "openssl-include=${build_d}/openssl/include")
+	printf '\n%s\n\n' "${green} Download and bootstrap ${magenta}boost_1_${boost_v}_0${end}"
+fi
+
+if [[ "${crypto}" == 'openssl' && "${system_crypto}" == 'yes' ]]; then
+	crypto_array=("crypto=openssl" "openssl-include=/usr/include" "openssl-lib=/usr/lib/$(arch)-linux-gnu")
+	printf '%s\n\n' "${green} Download and bootstrap ${magenta}boost_1_${boost_v}_0${end}"
+fi
+
 if [[ ! -f "${build_d}/boost_1_${boost_v}_0/b2" ]]; then
 	curl -sNLk "https://boostorg.jfrog.io/artifactory/main/release/1.${boost_v}.0/source/boost_1_${boost_v}_0.tar.gz" --create-dirs -o "${build_d}/boost_1_${boost_v}_0.tar.gz"
 	tar xf "${build_d}/boost_1_${boost_v}_0.tar.gz" -C "${build_d}"
@@ -95,7 +116,7 @@ if [[ ! -f "${build_d}/boost_1_${boost_v}_0/b2" ]]; then
 else
 	printf '%s\n' "${yellow} Skipping - we have already downloaded: ${magenta}boost_1_${boost_v}_0${end}"
 fi
-#
+
 printf '\n%s\n\n' "${green} Configure ${cyan}BOOST_BUILD_PATH ${green}to locate our headers${end}"
 #
 export BOOST_BUILD_PATH="${build_d}/boost_1_${boost_v}_0" # once boost is bootstrapped and b2 is built you only need to set this for b2 + libtorrent.
@@ -114,7 +135,7 @@ cd "${build_d}/libtorrent" || exit
 if [[ "${libtorrent:-no}" == yes ]]; then
 	printf '\n%s\n\n' "${green} Build libtorrent ${libtorrent_b}${end}"
 	#
-	"${build_d}/boost_1_${boost_v}_0/b2" -j"$(nproc)" address-model="$(getconf LONG_BIT)" "${lto}" optimization=speed cxxstd="${cxxstd}" variant=release dht=on encryption=on "${crypto[@]}" i2p=on extensions=on threading=multi link=static boost-link=static install --prefix="${install_d}"
+	"${build_d}/boost_1_${boost_v}_0/b2" -j"$(nproc)" address-model="$(getconf LONG_BIT)" "${lto}" optimization=speed cxxstd="${cxxstd}" variant=release dht=on encryption=on "${crypto_array[@]}" i2p=on extensions=on threading=multi link=static boost-link=static install --prefix="${install_d}"
 	#
 	printf '\n%s\n\n' "${green} Files are located at: ${cyan}${install_d}/lib${end}"
 else
@@ -133,7 +154,7 @@ if [[ "${python_b}" == yes ]]; then
 	#
 	printf '%s\n\n' "${green} Build libtorrent ${libtorrent_b} pything bindings${end}"
 	#
-	"${build_d}/boost_1_${boost_v}_0/b2" -j"$(nproc)" address-model="$(getconf LONG_BIT)" fpic=on "${lto}" optimization=speed cxxstd="${cxxstd}" variant=release dht=on encryption=on "${crypto[@]}" i2p=on extensions=on threading=multi libtorrent-link=static boost-link=static install_module python-install-scope=user
+	"${build_d}/boost_1_${boost_v}_0/b2" -j"$(nproc)" address-model="$(getconf LONG_BIT)" fpic=on "${lto}" optimization=speed cxxstd="${cxxstd}" variant=release dht=on encryption=on "${crypto_array[@]}" i2p=on extensions=on threading=multi libtorrent-link=static boost-link=static install_module python-install-scope=user
 	#
 	printf '\n%s\n\n' "${green} Python binding file is located at: ${cyan}$("${python_v}" -c "import site; import sys; sys.stdout.write(site.USER_SITE)")/libtorrent.so${end}"
 	printf '%s\n\n' "${green} Python binding version is: ${cyan}$("${python_v}" -c "import libtorrent; print(libtorrent.version)")${end}"
