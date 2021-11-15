@@ -40,7 +40,7 @@ python_v="${python_v:-python_v}"       # set the python version 2/3 - default is
 crypto="${crypto:-openssl}"            # set wolfssl as alternative to opensll (default)
 CXXFLAGS="-std=c++${cxxstd:-17} -fPIC" # Set some basic CXXFLAGS
 #
-[[ -n "${lto}" ]] && lto="lto=${yellow}on" || lto="" # set values for boost the build dir and the liborrent branch - default is null . On or null are the options
+[[ -n "${lto}" ]] && lto="lto=on" || lto="" # set values for boost the build dir and the liborrent branch - default is null . On or null are the options
 #
 if [[ "$(id -un)" = 'root' ]]; then
 	printf '\n%s\n\n' "${green} Update env and install core deps${end}"
@@ -61,15 +61,15 @@ if [[ "$(id -un)" = 'root' ]]; then
 fi
 #
 printf '\n%s\n\n' "${green} Values being used:${end}"
-printf '%s\n\n' " boost_v=${yellow}1.${boost_v}.0${end}"
-printf '%s\n\n' " build_d=${yellow}${build_d}${end}"
-printf '%s\n\n' " libtorrent_b=${yellow}${libtorrent_b}${end}"
-printf '%s\n\n' " cxxstd=${yellow}${cxxstd}${end}"
-printf '%s\n\n' " libtorrent=${yellow}${libtorrent}${end}"
-printf '%s\n\n' " python_b=${yellow}${python_b}${end}"
-printf '%s\n\n' " python_v=${yellow}$("${python_v}" -c "import sys; print(sys.version_info[0])")${end}"
-printf '%s\n\n' " ${lto:-lto=${yellow}off}${end}"
-printf '%s\n\n' " crypto=${yellow}${crypto} ${end}${end}"
+printf '%s\n\n' " boost_v=1.${boost_v}.0${end}"
+printf '%s\n\n' " build_d=${build_d}${end}"
+printf '%s\n\n' " libtorrent_b=${libtorrent_b}${end}"
+printf '%s\n\n' " cxxstd=${cxxstd}${end}"
+printf '%s\n\n' " libtorrent=${libtorrent}${end}"
+printf '%s\n\n' " python_b=${python_b}${end}"
+printf '%s\n\n' " python_v=$("${python_v}" -c "import sys; print(sys.version_info[0])")${end}"
+printf '%s\n\n' " ${lto:-lto=off}${end}"
+printf '%s\n\n' " crypto=${crypto} ${end}${end}"
 #
 if [[ "${crypto}" == 'wolfssl' ]]; then
 	printf '%s\n\n' "${green} Download and bootstrap ${magenta}wolfssl${end}"
@@ -130,9 +130,6 @@ if [[ "${python_b}" == yes ]]; then
 	echo "using python : ${python_major}.${python_minor} : /usr/bin/python${python_major}.${python_minor} : /usr/include/python${python_major}.${python_minor} : /usr/lib/python${python_major}.${python_minor} ;" >> "$HOME/user-config.jam"
 	#
 	cd "${build_d}/libtorrent/bindings/python" || exit
-	#
-	printf '%s\n\n' "${green} Patch ${cyan}bindings/python/src/torrent_info.cpp${end}"
-	sed 's|protocol_version|lt::protocol_version|g' -i src/torrent_info.cpp
 	#
 	printf '%s\n\n' "${green} Build libtorrent ${libtorrent_b} pything bindings${end}"
 	#
