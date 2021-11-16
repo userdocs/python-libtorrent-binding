@@ -79,8 +79,7 @@ set_build_directory() {
 	#
 	# Define some build specific variables
 	PATH="$install_dir/bin:$HOME/bin${PATH:+:${PATH}}"
-	LD_LIBRARY_PATH="-L$lib_dir"
-	PKG_CONFIG_PATH="-L$lib_dir/pkgconfig"
+	PKG_CONFIG_PATH="$lib_dir/pkgconfig"
 }
 #####################################################################################################################################################
 # This function is where we set your URL that we use with other functions.
@@ -116,20 +115,20 @@ set_module_urls() {
 # This function determines which crypto is default (openssl) and what to do if wolfssl is selected.
 #####################################################################################################################################################
 set_libtorrent_crypto() {
-	LIBTORRENT_CRYPTO="crypto=openssl openssl-lib=$install_dir/openssl-$openssl_github_tag openssl-include=$install_dir/openssl-$openssl_github_tag/include"
+	pb_libtorrent_crypto=("crypto=openssl" "openssl-lib=$install_dir/openssl-$openssl_github_tag" "openssl-include=$install_dir/openssl-$openssl_github_tag/include")
 	SSL_MODULE="openssl"
 	#
 	if [[ "$CRYPTO_TYPE" = 'wolfssl' ]]; then
 		if [[ "$LIBTORRENT_GITHUB_TAG" =~ ^(RC_2_[0-9]|v2[\.0-9]{2,3}[\.0-9]{2,2})$ ]]; then
-			LIBTORRENT_CRYPTO="crypto=wolfssl wolfssl-lib=$install_dir/wolfssl/src/.libs wolfssl-include=$install_dir/wolfssl"
+			pb_libtorrent_crypto=("crypto=wolfssl" "wolfssl-lib=$install_dir/wolfssl/src/.libs" "wolfssl-include=$install_dir/wolfssl")
 			SSL_MODULE="wolfssl"
 		else
 			echo
-			echo -e "${cy}wolfssl only works with libtorrent v2 or above${cend}"
+			echo -e "${cy} wolfssl only works with libtorrent v2 or above${cend}"
 			echo
-			echo -e "${td}This script defaults to the v1.2 latest version${cend}"
+			echo -e "${td} This script defaults to the v1.2 latest version${cend}"
 			echo
-			echo -e "${cg}~/$(basename -- "$0")${cend} ${clm}all${cend} ${clb}-c${cend} ${clm}wolfssl${cend} ${clb}-lt${cend} ${cc}RC_2_0${cend}"
+			echo -e "${cg} ~/$(basename -- "$0")${cend} ${clm}all${cend} ${clb}-c${cend} ${clm}wolfssl${cend} ${clb}-lt${cend} ${cc}RC_2_0${cend}"
 			echo
 			exit
 		fi
@@ -788,6 +787,7 @@ if [[ "${!app_name_skip:-yes}" = 'no' || "$1" = "$app_name" ]]; then
 	download_folder "$app_name" "${!app_github_url}"
 	#
 	./autogen.sh
+	./configure --help > "$install_dir/config-help.txt"
 	./configure --prefix="$install_dir" --enable-static --disable-shared --enable-asio --enable-sni --enable-nginx CXXFLAGS="$CXXFLAGS" CPPFLAGS="$CPPFLAGS" LDFLAGS="$LDFLAGS" 2>&1 | tee "$install_dir/logs/$app_name.log.txt"
 	make -j"$(nproc)" 2>&1 | tee -a "$install_dir/logs/$app_name.log.txt"
 else
@@ -838,7 +838,7 @@ if [[ "${!app_name_skip:-yes}" = 'no' ]] || [[ "$1" = "$app_name" ]]; then
 		#
 		cd "$folder_name/bindings/python"
 		#
-		"$install_dir/boost/b2" -j"$(nproc)" ${LIBTORRENT_CRYPTO} address-model="$(getconf LONG_BIT)" cxxstd="${cxxstd:-17}" lto=on fpic=on dht=on encryption=on i2p=on extensions=on variant=release threading=multi libtorrent-link=static boost-link=static cxxflags="$CXXFLAGS" cflags="$CPPFLAGS" linkflags="$LDFLAGS" ${LIBTORRENT_INSTALL_MODULE} 2>&1 | tee "$install_dir/logs/libtorrent.log.txt"
+		"$install_dir/boost/b2" -j"$(nproc)" "${pb_libtorrent_crypto[@]}" address-model="$(getconf LONG_BIT)" cxxstd="${cxxstd:-17}" lto=on fpic=on dht=on encryption=on i2p=on extensions=on variant=release threading=multi libtorrent-link=static boost-link=static cxxflags="$CXXFLAGS" cflags="$CPPFLAGS" linkflags="$LDFLAGS" ${LIBTORRENT_INSTALL_MODULE} 2>&1 | tee "$install_dir/logs/libtorrent.log.txt"
 		#
 		[[ -f "$install_dir/libtorrent/bindings/python/libtorrent.so" ]] && cp "$install_dir/libtorrent/bindings/python/libtorrent.so" "$install_dir/completed/libtorrent.so"
 		#
