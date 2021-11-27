@@ -18,17 +18,21 @@ yellow="$(tput setaf 3)"
 magenta="$(tput setaf 5)"
 cyan="$(tput setaf 6)"
 end="$(tput sgr0)"
-#
+
 for setting in "${@}"; do
 	export "${setting?}"
 done
-#
+
+what_id="$(source /etc/os-release && printf "%s" "${ID}")"                             # Get the main platform name, for example: debian, ubuntu or alpine
+what_version_codename="$(source /etc/os-release && printf "%s" "${VERSION_CODENAME}")" # Get the codename for this this OS. Note, Alpine does not have a unique codename.
+
 [[ -z "${python_v}" ]] && python_v="python3"
 [[ "${python_v}" -eq '2' ]] && python_v="python2"
 [[ "${python_v}" -eq '3' ]] && python_v="python3"
-[[ "$(source /etc/os-release && printf '%s' "$VERSION_CODENAME")" =~ (stretch|bionic) && "${python_v}" == 'python2' ]] && python_v="python"
-#
-## Defaults are set here
+[[ "${what_version_codename}" =~ ^(stretch|bionic)$ && "${python_v}" == 'python2' ]] && python_v="python"
+[[ "${what_version_codename}" =~ ^(alpine)$ && "${python_v}" == 'python3' ]] && pipnumpy=("py3-pip" "py3-numpy")
+
+# Defaults are set here
 boost_v="${boost_v:-77}"               # set the boost version using just 74/75/76/77
 build_d="$(pwd)/${build_d:-lt-build}"  # set the build directory - default is 3 lt-build relative to the container /root
 install_d="${build_d}-completed"       # set the completed directory based of the build dir name
@@ -42,23 +46,30 @@ system_crypto="${system_crypto:-no}"   # use system libs [yes] or git ltest rele
 CXXFLAGS="-std=c++${cxxstd:-17} -fPIC" # Set some basic CXXFLAGS
 
 [[ -n "${lto}" ]] && lto="lto=on" || lto="" # set values for boost the build dir and the liborrent branch - default is null . On or null are the options
-#
+
 if [[ "$(id -un)" = 'root' ]]; then
-	printf '\n%s\n\n' "${green} Update env and install core deps${end}"
-	DEBIAN_FRONTEND="noninteractive"
-	TZ="Europe/London"
-	#
-	apt-get update
-	apt-get upgrade -y
-	#
-	printf '%s\n' "LC_ALL=en_GB.UTF-8" "LANG=en_GB.UTF-8" "LANGUAGE=en_GB.UTF-8" > /etc/default/locale
-	source /etc/default/locale
-	#
-	apt-get install -y locales
-	sed 's|# en_GB.UTF-8 UTF-8|en_GB.UTF-8 UTF-8|g' -i /etc/locale.gen
-	locale-gen
-	#
-	apt-get install -y build-essential dh-autoreconf curl pkg-config git perl "${python_v}" "${python_v}-dev" zlib1g-dev libssl-dev dh-autoreconf # install the deps
+	if [[ $what_id =~ ^(debian|ubuntu)$ ]]; then
+		printf '\n%s\n\n' "${green} Update env and install core deps${end}"
+		DEBIAN_FRONTEND="noninteractive"
+		TZ="Europe/London"
+		#
+		apt-get update
+		apt-get upgrade -y
+		#
+		printf '%s\n' "LC_ALL=en_GB.UTF-8" "LANG=en_GB.UTF-8" "LANGUAGE=en_GB.UTF-8" > /etc/default/locale
+		source /etc/default/locale
+		#
+		apt-get install -y locales
+		sed 's|# en_GB.UTF-8 UTF-8|en_GB.UTF-8 UTF-8|g' -i /etc/locale.gen
+		locale-gen
+		#
+		apt-get install -y build-essential dh-autoreconf curl pkg-config git perl "${python_v}" "${python_v}-dev" zlib1g-dev libssl-dev dh-autoreconf # install the deps
+	elif [[ ${what_id} =~ ^(alpine)$ ]]; then
+		apk update
+		apk upgrade
+		apk fix
+		apk add build-base curl pkgconf autoconf automake libtool git perl "${python_v}" "${python_v}-dev" "${pipnumpy[@]}" linux-headers libffi-dev openssl-dev openssl-libs-static zlib-dev jpeg-dev
+	fi
 fi
 
 printf '\n%s\n\n' "${green} Values being used:${end}"
@@ -123,7 +134,7 @@ export BOOST_BUILD_PATH="${build_d}/boost_1_${boost_v}_0" # once boost is bootst
 #
 printf '%s\n\n' "${green} Configure boost env via ${cyan}user-config.jam${end}"
 #
-echo "using gcc : $(gcc -dumpversion) : g++-$(g++ -dumpversion) ;" > "$HOME/user-config.jam" # Create this file for b2: -dumpversion may give return a bad result outside a debian based systems
+echo "using gcc : : ;" > "$HOME/user-config.jam" # Create this file for b2: -dumpversion may give return a bad result outside a debian based systems
 #
 printf '%s\n\n' "${green} Git clone libtorrent ${magenta}${libtorrent_b}${end}"
 #
