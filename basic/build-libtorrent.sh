@@ -6,6 +6,8 @@
 #
 # docker run -it -w /root -v ~/build:/root ubuntu:focal /bin/bash -c 'apt update && apt install -y curl && curl -sL git.io/JXDOJ | bash -s boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto= crypto= system_crypto='
 #
+# docker run -it -w /root -v ~/build:/root alpine:latest /bin/ash -c 'apk update && apk add bash curl ncurses && curl -sL git.io/JXDOJ | bash -s boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto= crypto= system_crypto='
+#
 # ./build-libtorrent.sh boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto= crypto= system_crypto=
 #
 set -a
@@ -33,17 +35,17 @@ what_version_codename="$(source /etc/os-release && printf "%s" "${VERSION_CODENA
 [[ "${what_version_codename}" =~ ^(alpine)$ && "${python_v}" == 'python3' ]] && pipnumpy=("py3-pip" "py3-numpy")
 
 # Defaults are set here
-boost_v="${boost_v:-77}"               # set the boost version using just 74/75/76/77
-build_d="$(pwd)/${build_d:-lt-build}"  # set the build directory - default is 3 lt-build relative to the container /root
-install_d="${build_d}-completed"       # set the completed directory based of the build dir name
-libtorrent_b="${libtorrent_b:-RC_2_0}" # set the libtorrent branch to use - default is RC_2_0
-cxxstd="${cxxstd:-17}"                 # set the cxx standard 11/14/17 - default is 17
-libtorrent=${libtorrent:-yes}          # built libtorrent yes/no - default is yes
-python_b="${python_b:-yes}"            # build the python binding yes/no - default is yes
-python_v="${python_v:-python_v}"       # set the python version 2/3 - default is 3
-crypto="${crypto:-openssl}"            # set wolfssl as alternative to opensll (default)
-system_crypto="${system_crypto:-no}"   # use system libs [yes] or git ltest release [no]
-CXXFLAGS="-std=c++${cxxstd:-17} -fPIC" # Set some basic CXXFLAGS
+boost_v="${boost_v:-77}"                   # boost_v= set the boost version using just 74/75/76/77
+build_d="$(pwd)/${build_d:-lt-build}"      # build_d= set the build directory - default is lt-build relative to the container /root
+install_d="${build_d}-completed"           # install_d= set the completed directory based of the build dir name
+libtorrent_b="${libtorrent_b:-RC_2_0}"     # libtorrent_b= set the libtorrent branch to use - default is RC_2_0
+cxxstd="${cxxstd:-17}"                     # cxxstd= set the cxx standard 11/14/17 - default is 17
+libtorrent=${libtorrent:-yes}              # libtorrent= built libtorrent yes/no - default is yes
+python_b="${python_b:-yes}"                # python_b= build the python binding yes/no - default is yes
+python_v="${python_v:-python_v}"           # python_v= set the python version 2/3 - default is 3
+crypto="${crypto:-openssl}"                # crypto= set wolfssl as alternative to openssl (default)
+system_crypto="${system_crypto:-no}"       # system_crypto= use system libs [yes] or git latest release [no]
+CXXFLAGS=("-std=c++${cxxstd:-17}" "-fPIC") # CXXFLAGS= Set some basic CXXFLAGS
 
 [[ -n "${lto}" ]] && lto="lto=on" || lto="" # set values for boost the build dir and the liborrent branch - default is null . On or null are the options
 
@@ -65,6 +67,7 @@ if [[ "$(id -un)" = 'root' ]]; then
 		#
 		apt-get install -y build-essential dh-autoreconf curl pkg-config git perl "${python_v}" "${python_v}-dev" zlib1g-dev libssl-dev dh-autoreconf # install the deps
 	elif [[ ${what_id} =~ ^(alpine)$ ]]; then
+		printf '\n%s\n\n' "${green} Update env and install core deps${end}"
 		apk update
 		apk upgrade
 		apk fix
@@ -91,7 +94,7 @@ if [[ "${crypto}" == 'wolfssl' && "${system_crypto}" == 'no' ]]; then
 	git clone --no-tags --single-branch --branch "${wolfssl_github_tag}" --shallow-submodules --recurse-submodules --depth 1 "https://github.com/wolfSSL/wolfssl.git" "${build_d}/wolfssl"
 	cd "${build_d}/wolfssl" || exit
 	./autogen.sh
-	./configure --enable-static --disable-shared --enable-asio --enable-sni --enable-nginx CXXFLAGS="$CXXFLAGS"
+	./configure --enable-static --disable-shared --enable-asio --enable-sni --enable-nginx "${CXXFLAGS[@]}"
 	make -j"$(nproc)"
 	crypto_array=("crypto=wolfssl" "wolfssl-lib=${build_d}/wolfssl/src/.libs" "wolfssl-include=${build_d}/wolfssl")
 	printf '\n%s\n\n' "${green} Download and bootstrap ${magenta}boost_1_${boost_v}_0${end}"
@@ -108,7 +111,7 @@ if [[ "${crypto}" == 'openssl' && "${system_crypto}" == 'no' ]]; then
 	[[ -d "${build_d}/openssl" ]] && rm -rf "${build_d}/openssl"
 	git clone --no-tags --single-branch --branch "${openssl_github_tag}" --shallow-submodules --recurse-submodules --depth 1 "https://github.com/openssl/openssl" "${build_d}/openssl"
 	cd "${build_d}/openssl" || exit
-	./config --prefix="${build_d}" --openssldir="/etc/ssl" threads no-shared no-dso no-comp CXXFLAGS="$CXXFLAGS"
+	./config --prefix="${build_d}" --openssldir="/etc/ssl" threads no-shared no-dso no-comp "${CXXFLAGS[@]}"
 	make -j"$(nproc)"
 	crypto_array=("crypto=openssl" "openssl-lib=${build_d}/openssl" "openssl-include=${build_d}/openssl/include")
 	printf '\n%s\n\n' "${green} Download and bootstrap ${magenta}boost_1_${boost_v}_0${end}"
