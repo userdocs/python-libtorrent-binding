@@ -86,6 +86,7 @@ printf '%s\n\n' " python_v=$("${python_v}" -c "import sys; print(sys.version_inf
 printf '%s\n\n' " ${lto:-lto=off}${end}"
 printf '%s\n\n' " crypto=${crypto} ${end}${end}"
 printf '%s\n\n' " system_crypto=${system_crypto} ${end}${end}"
+printf '%s\n\n' " gcc version : $(gcc -dumpversion) ${end}${end}"
 
 if [[ "${crypto}" == 'wolfssl' && "${system_crypto}" == 'no' ]]; then
 	printf '%s\n\n' "${green} Download and bootstrap ${magenta}wolfssl${end}"
