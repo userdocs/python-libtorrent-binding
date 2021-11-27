@@ -4,11 +4,11 @@
 #
 # shellcheck disable=SC1091,SC2034
 #
-# docker run -it -w /root -v ~/build:/root ubuntu:focal /bin/bash -c 'apt update && apt install -y curl && curl -sL git.io/JXDOJ | bash -s boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto= crypto= system_crypto='
+# docker run -it -w /root -v ~/build:/root ubuntu:focal /bin/bash -c 'apt update && apt install -y curl && curl -sL git.io/JXDOJ | bash -s boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto= crypto= system_crypto= debug_symbols='
 #
-# docker run -it -w /root -v ~/build:/root alpine:latest /bin/ash -c 'apk update && apk add bash curl ncurses && curl -sL git.io/JXDOJ | bash -s boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto= crypto= system_crypto='
+# docker run -it -w /root -v ~/build:/root alpine:latest /bin/ash -c 'apk update && apk add bash curl ncurses && curl -sL git.io/JXDOJ | bash -s boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto= crypto= system_crypto= debug_symbols='
 #
-# ./build-libtorrent.sh boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto= crypto= system_crypto=
+# ./build-libtorrent.sh boost_v= build_d= libtorrent_b= cxxstd= libtorrent= python_b= python_v= lto= crypto= system_crypto= debug_symbols=
 #
 set -a
 #
@@ -45,6 +45,7 @@ python_b="${python_b:-yes}"                # python_b= build the python binding 
 python_v="${python_v:-python_v}"           # python_v= set the python version 2/3 - default is 3
 crypto="${crypto:-openssl}"                # crypto= set wolfssl as alternative to openssl (default)
 system_crypto="${system_crypto:-no}"       # system_crypto= use system libs [yes] or git latest release [no]
+debug_symbols=${debug_symbols:-off}        # build debug symbols - default off - options on/off
 CXXFLAGS=("-std=c++${cxxstd:-17}" "-fPIC") # CXXFLAGS= Set some basic CXXFLAGS
 
 [[ -n "${lto}" ]] && lto="lto=on" || lto="" # set values for boost the build dir and the liborrent branch - default is null . On or null are the options
@@ -86,6 +87,7 @@ printf '%s\n\n' " python_v=$("${python_v}" -c "import sys; print(sys.version_inf
 printf '%s\n\n' " ${lto:-lto=off}"
 printf '%s\n\n' " crypto=${crypto}"
 printf '%s\n\n' " system_crypto=${system_crypto}"
+printf '%s\n\n' " debug_symbols=${debug_symbols}"
 printf '%s\n\n' " gcc version : $(gcc -dumpversion)"
 
 if [[ "${crypto}" == 'wolfssl' && "${system_crypto}" == 'no' ]]; then
@@ -150,7 +152,7 @@ cd "${build_d}/libtorrent" || exit
 if [[ "${libtorrent:-no}" == yes ]]; then
 	printf '\n%s\n\n' "${green} Build libtorrent ${libtorrent_b}${end}"
 	#
-	"${build_d}/boost_1_${boost_v}_0/b2" -j"$(nproc)" address-model="$(getconf LONG_BIT)" "${lto}" optimization=speed cxxstd="${cxxstd}" variant=release dht=on encryption=on "${crypto_array[@]}" i2p=on extensions=on threading=multi link=static boost-link=static install --prefix="${install_d}"
+	"${build_d}/boost_1_${boost_v}_0/b2" -j"$(nproc)" address-model="$(getconf LONG_BIT)" "${lto}" debug-symbols="${debug_symbols}" optimization=speed cxxstd="${cxxstd}" variant=release dht=on encryption=on "${crypto_array[@]}" i2p=on extensions=on threading=multi link=static boost-link=static install --prefix="${install_d}"
 	#
 	printf '\n%s\n\n' "${green} Files are located at: ${cyan}${install_d}/lib${end}"
 else
@@ -169,7 +171,7 @@ if [[ "${python_b}" == yes ]]; then
 	#
 	printf '%s\n\n' "${green} Build libtorrent ${libtorrent_b} pything bindings${end}"
 	#
-	"${build_d}/boost_1_${boost_v}_0/b2" -j"$(nproc)" address-model="$(getconf LONG_BIT)" fpic=on "${lto}" optimization=speed cxxstd="${cxxstd}" variant=release dht=on encryption=on "${crypto_array[@]}" i2p=on extensions=on threading=multi libtorrent-link=static boost-link=static install_module python-install-scope=user
+	"${build_d}/boost_1_${boost_v}_0/b2" -j"$(nproc)" address-model="$(getconf LONG_BIT)" fpic=on "${lto}" debug-symbols="${debug_symbols}" optimization=speed cxxstd="${cxxstd}" variant=release dht=on encryption=on "${crypto_array[@]}" i2p=on extensions=on threading=multi libtorrent-link=static boost-link=static install_module python-install-scope=user
 	#
 	printf '\n%s\n\n' "${green} Python binding file is located at: ${cyan}$("${python_v}" -c "import site; import sys; sys.stdout.write(site.USER_SITE)")/libtorrent.so${end}"
 	printf '%s\n\n' "${green} Python binding version is: ${cyan}$("${python_v}" -c "import libtorrent; print(libtorrent.version)")${end}"
