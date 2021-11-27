@@ -76,17 +76,17 @@ if [[ "$(id -un)" = 'root' ]]; then
 fi
 
 printf '\n%s\n\n' "${green} Values being used:${end}"
-printf '%s\n\n' " boost_v=1.${boost_v}.0${end}"
-printf '%s\n\n' " build_d=${build_d}${end}"
-printf '%s\n\n' " libtorrent_b=${libtorrent_b}${end}"
-printf '%s\n\n' " cxxstd=${cxxstd}${end}"
-printf '%s\n\n' " libtorrent=${libtorrent}${end}"
-printf '%s\n\n' " python_b=${python_b}${end}"
-printf '%s\n\n' " python_v=$("${python_v}" -c "import sys; print(sys.version_info[0])")${end}"
-printf '%s\n\n' " ${lto:-lto=off}${end}"
-printf '%s\n\n' " crypto=${crypto} ${end}${end}"
-printf '%s\n\n' " system_crypto=${system_crypto} ${end}${end}"
-printf '%s\n\n' " gcc version : $(gcc -dumpversion) ${end}${end}"
+printf '%s\n\n' " boost_v=1.${boost_v}.0"
+printf '%s\n\n' " build_d=${build_d}"
+printf '%s\n\n' " libtorrent_b=${libtorrent_b}"
+printf '%s\n\n' " cxxstd=${cxxstd}"
+printf '%s\n\n' " libtorrent=${libtorrent}"
+printf '%s\n\n' " python_b=${python_b}"
+printf '%s\n\n' " python_v=$("${python_v}" -c "import sys; print(sys.version_info[0])")"
+printf '%s\n\n' " ${lto:-lto=off}"
+printf '%s\n\n' " crypto=${crypto}"
+printf '%s\n\n' " system_crypto=${system_crypto}"
+printf '%s\n\n' " gcc version : $(gcc -dumpversion)"
 
 if [[ "${crypto}" == 'wolfssl' && "${system_crypto}" == 'no' ]]; then
 	printf '%s\n\n' "${green} Download and bootstrap ${magenta}wolfssl${end}"
