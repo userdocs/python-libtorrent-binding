@@ -171,7 +171,7 @@ if [[ "${python_b}" == yes ]]; then
 	#
 	printf '%s\n\n' "${green} Build libtorrent ${libtorrent_b} pything bindings${end}"
 	#
-	"${build_d}/boost_1_${boost_v}_0/b2" -j"$(nproc)" address-model="$(getconf LONG_BIT)" fpic=on "${lto}" debug-symbols="${debug_symbols}" optimization=speed cxxstd="${cxxstd}" variant=release dht=on encryption=on "${crypto_array[@]}" i2p=on extensions=on threading=multi libtorrent-link=static boost-link=static install_module python-install-scope=user
+	"${build_d}/boost_1_${boost_v}_0/b2" -j"$(nproc)" address-model="$(getconf LONG_BIT)" fpic=on "${lto}" debug-symbols="${debug_symbols}" optimization=speed cxxstd="${cxxstd}" variant=release dht=on encryption=on "${crypto_array[@]}" i2p=on extensions=on threading=multi libtorrent-link=static boost-link=static stage_dependencies install_module python-install-scope=user
 	#
 	printf '\n%s\n\n' "${green} Python binding file is located at: ${cyan}$("${python_v}" -c "import site; import sys; sys.stdout.write(site.USER_SITE)")/libtorrent.so${end}"
 	printf '%s\n\n' "${green} Python binding version is: ${cyan}$("${python_v}" -c "import libtorrent; print(libtorrent.version)")${end}"
