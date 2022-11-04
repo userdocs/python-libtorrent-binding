@@ -88,10 +88,11 @@ set_module_urls() {
 	openssl_github_tag="$(git ls-remote -q -t --refs https://github.com/openssl/openssl.git | awk '/openssl/{sub("refs/tags/", "");sub("(.*)(v6|rc|alpha|beta)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n1)"
 	openssl_url="https://github.com/openssl/openssl/archive/${openssl_github_tag}.tar.gz"
 	#
-	wolfssl_github_tag="$(grep -Eom1 'v([0-9.]+?)-stable' <(curl "https://github.com/wolfSSL/wolfssl/tags"))"
+	wolfssl_github_tag="$(git ls-remote -q -t --refs https://github.com/wolfSSL/wolfssl.git | awk '/v/{sub("refs/tags/", "");sub("(.*)(v6|rc|RC|alpha|beta)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n1)"
 	wolfssl_github_url="https://github.com/wolfSSL/wolfssl.git"
 	#
-	boost_version="$(grep -Eom1 '1.(.*).0$' <(curl -sNL "https://github.com/boostorg/boost/tags"))"
+	boost_version="${boost_version:-$(git ls-remote -q -t --refs https://github.com/boostorg/boost.git | awk '{sub("refs/tags/boost-", "");sub("(.*)(rc|alpha|beta)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n1)}"
+	boost_github_tag="boost-${boost_version}"
 	[[ "$LIBTORRENT_GITHUB_TAG" =~ (libtorrent-1_1_*|RC_1_1) ]] && boost_version="1.76.0"
 	boost_github_tag="boost-${boost_version}"
 	boost_url="https://boostorg.jfrog.io/artifactory/main/release/${boost_version}/source/boost_${boost_version//./_}.tar.gz"
@@ -105,11 +106,12 @@ set_module_urls() {
 	elif [[ "$LIBTORRENT_GITHUB_TAG" = "lm_master" ]]; then
 		libtorrent_github_tag="RC_${libtorrent_version//./_}"
 	else
-		libtorrent_github_tag="$(grep -Eom1 "v$libtorrent_version.([0-9]{1,2})" <(curl "https://github.com/arvidn/libtorrent/tags"))"
+		libtorrent_github_tags_list="$(git ls-remote -q -t --refs https://github.com/arvidn/libtorrent.git | awk '/\/v/{sub("refs/tags/", "");sub("(.*)(-[^0-9].*)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV)"
+		libtorrent_github_tag="$(grep -Eom1 "v${libtorrent_version}.([0-9]{1,2})" <<< "${libtorrent_github_tags_list}")"
 	fi
 	#
-	ltconfig_version="$(grep -Eom1 "ltConfig-(.*).egg" <(curl "https://github.com/ratanakvlun/deluge-ltconfig/releases"))"
-	ltconfig_url="$(grep -Eom1 'ht(.*)ltConfig(.*)egg' <(curl "https://api.github.com/repos/ratanakvlun/deluge-ltconfig/releases/latest"))"
+	ltconfig_version="$(git ls-remote -q -t --refs https://github.com/ratanakvlun/deluge-ltconfig.git | awk '//{sub("refs/tags/", "");sub("(.*)(v6|rc|alpha|beta)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n1)"
+	ltconfig_url="https://github.com/ratanakvlun/deluge-ltconfig/releases/latest/download/ltConfig-${ltconfig_version//v/}.egg"
 }
 #####################################################################################################################################################
 # This function determines which crypto is default (openssl) and what to do if wolfssl is selected.
