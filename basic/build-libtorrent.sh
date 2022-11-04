@@ -35,7 +35,7 @@ what_version_codename="$(source /etc/os-release && printf "%s" "${VERSION_CODENA
 [[ "${what_version_codename}" =~ ^(alpine)$ && "${python_v}" == 'python3' ]] && pipnumpy=("py3-pip" "py3-numpy")
 
 # Defaults are set here
-boost_v="${boost_v:-77}"                   # boost_v= set the boost version using just 74/75/76/77
+boost_v="${boost_v:-80}"                   # boost_v= set the boost version using just 74/75/76/77
 build_d="$(pwd)/${build_d:-lt-build}"      # build_d= set the build directory - default is lt-build relative to the container /root
 install_d="${build_d}-completed"           # install_d= set the completed directory based of the build dir name
 libtorrent_b="${libtorrent_b:-RC_2_0}"     # libtorrent_b= set the libtorrent branch to use - default is RC_2_0
