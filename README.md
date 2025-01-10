@@ -71,8 +71,6 @@ chmod +x libtorrent-python.bash
 ./libtorrent-python.bash
 ```
 
-## Installation (legacy)
-
 There are two ways to use the script
 
 -   With a docker image for the relevant platform.
