@@ -241,22 +241,22 @@ if [[ ! "$1" =~ ^-h ]]; then
 	_privilege_check
 	_check_tools_info silent
 
-	if [[ $1 == "update" ]]; then
+	if [[ $* =~ ([[:space:]]|^)(update)([[:space:]]|$) ]]; then
 		_update_os
 	fi
 
-	if [[ $1 == "install" ]]; then
+	if [[ $* =~ ([[:space:]]|^)(install)([[:space:]]|$) ]]; then
 		_install_tools
 	fi
 
-	if [[ $1 == "bootstrap" ]]; then
+	if [[ $* =~ ([[:space:]]|^)(bootstrap)([[:space:]]|$) ]]; then
 		_update_os
 		_install_tools
 	fi
 
 	_check_tools_info
 
-	if [[ $1 == "debug" ]]; then
+	if [[ $* =~ ([[:space:]]|^)(debug)([[:space:]]|$) ]]; then
 		_debug
 	fi
 

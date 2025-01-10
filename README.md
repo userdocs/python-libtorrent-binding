@@ -38,22 +38,40 @@ Here are a list of available options
  Use: -lm or --libtorrent-master Help: -h-lm or --help-libtorrent-master
  Use: -lt or --libtorrent-tag    Help: -h-lt or --help-libtorrent-tag
  Use: -p  or --proxy             Help: -h-p  or --help-proxy
- Use: -pv or --python-version    Help: -h-pv or --help-python-version
  Use: -tb or --test-build        Help: -h-tb or --help-test-build
  Use: -s  or --scope             Help: -h-s  or --help-scope
 
 Module specific help - flags are used with the modules listed here.
 
-Use: all or module-name         Usage: ~/musl-libtorrent-python.sh all
+Use: all or module-name         Usage: ~/libtorrent-python.bash all
 
- all         - Install all modules - openssl boost libtorrent
- openssl     - Install the openssl module (default)
- wolfssl     - Install the wolf module (Libtorrent v2 only)
- boost       - Download, extract and bootstrap the boost build files
- libtorrent  - Build the libtorrent python binding
+Here are a list of dependency specific modules
+
+ update --------- update host - apt/apk update
+ install -------- Install dependencies
+ bootstrap ------ update and install combined
+ install_deluge - pip install deluge
+
+Here are a list of build specific modules
+
+ all ---------- Install all modules - openssl boost libtorrent
+ openssl ------ Install the openssl module (default)
+ wolfssl ------ Install the wolf module (Libtorrent v2 only)
+ boost -------- Download, extract and bootstrap the boost build files
+ libtorrent --- Build the libtorrent python binding
 ```
 
-## Installation
+## Installation unified
+
+`libtorrent-python.bash` us works on modern Alpine or Debian based hosts.
+
+```bash
+curl -sLO https://raw.githubusercontent.com/userdocs/python-libtorrent-binding/refs/heads/master/libtorrent-python.bash
+chmod +x libtorrent-python.bash
+./libtorrent-python.bash
+```
+
+## Installation (legacy)
 
 There are two ways to use the script
 
@@ -177,3 +195,7 @@ You can install deluge by using the command:
 It will install to the `~/.local` directory of the user running the script.
 
 **Note:** This script does not attempt to configure deluge.
+
+### Tuning
+
+https://forum.deluge-torrent.org/viewtopic.php?t=56921
