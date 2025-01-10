@@ -6,7 +6,7 @@
 #
 # @author - userdocs
 #
-# @contributors IceCodeNew
+# @contributors IceCodeNew, brettpetch
 #
 # @credits - https://gist.github.com/notsure2
 #
@@ -40,14 +40,28 @@ cc="\e[36m" && clc="\e[96m" # [c]olor[c]yan    && [c]olor[l]ight[c]yan
 tb="\e[1m" && td="\e[2m" && tu="\e[4m" && tn="\n" # [t]ext[b]old && [t]ext[d]im && [t]ext[u]nderlined && [t]ext[n]ewline
 #
 cend="\e[0m" # [c]olor[end]
-#
+#####################################################################################################################################################
+# A lazy fix for curl or git not being present on the system. This is a temporary fix and will be replaced with a better solution in the future.
+#####################################################################################################################################################
+check_and_install_commands() {
+	local commands_to_check=("curl" "git")
+	for cmd in "${commands_to_check[@]}"; do
+		if ! command -v "$cmd" &> /dev/null; then
+			echo "Installing $cmd..."
+			apk update
+			apk add "$cmd"
+		fi
+	done
+}
+check_and_install_commands
 #####################################################################################################################################################
 # This function sets some compiler flags globally - b2 settings are set in the ~/user-config.jam - this is set in the installation_modules function
 #####################################################################################################################################################
 custom_flags_set() {
-	CXXFLAGS="-std=c++${cxxstd:-17} -fPIC"
-	CPPFLAGS="-I$include_dir"
-	LDFLAGS="-L$lib_dir"
+	CFLAGS="-std=c++${cxxstd:-20} -fPIC -O3 -march=native -pipe -fstack-clash-protection -fstack-protector-strong -fno-plt -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 -D_GLIBCXX_ASSERTIONS"
+	CPPFLAGS="-I$include_dir -fPIC -O3 -march=native"
+	CXXFLAGS="-pipe -fstack-clash-protection -fstack-protector-strong -fno-plt -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 -D_GLIBCXX_ASSERTIONS"
+	LDFLAGS="-L$lib_dir -gz -Wl,-O1,--as-needed,--sort-common,-z,now,-z,pack-relative-relocs,-z,relro"
 }
 #####################################################################################################################################################
 # This function creates our curl function that we use throughout this script.
@@ -57,6 +71,21 @@ curl() {
 		"$(type -P curl)" -sNL4fq --connect-timeout 5 --retry 5 --retry-delay 10 --retry-max-time 60 "$@"
 	else
 		"$(type -P curl)" -sNL4fq --connect-timeout 5 --retry 5 --retry-delay 10 --retry-max-time 60 --proxy-insecure ${CURL_PROXY} "$@"
+	fi
+}
+
+github_latest_version() {
+	# Argument expects the author/repo format that has a vlaid release url.
+	# e.g. boostorg/boost
+	if [[ -n "$1" ]]; then
+		url_effective="$(curl -fsSLI -o /dev/null -w "%{url_effective}" "https://github.com/${1}/releases/latest")"
+		if [[ "${url_effective##*/}" == "releases" ]]; then
+			printf '%s\n' "error:github_latest_version"
+		else
+			printf '%s\n' "${url_effective##*/}"
+		fi
+	else
+		printf '%s\n' "error:github_latest_version"
 	fi
 }
 #####################################################################################################################################################
@@ -82,23 +111,42 @@ set_build_directory() {
 	PKG_CONFIG_PATH="$lib_dir/pkgconfig"
 }
 #####################################################################################################################################################
+# boost url function
+#####################################################################################################################################################
+boost_url() {
+	boost_github_tag="$(github_latest_version boostorg/boost)"
+	boost_version="${boost_github_tag/boost-/}"
+
+	local boost_url_array=(
+		"https://github.com/boostorg/boost/releases/download/${boost_github_tag}/${boost_github_tag}-b2-nodocs.tar.xz"
+		"https://archives.boost.io/release/${boost_github_tag/boost-/}/source/${boost_github_tag//[-\.]/_}.tar.gz"
+	)
+
+	for url in "${boost_url_array[@]}"; do
+		if curl -sfLI "${url}" &> /dev/null; then
+			boost_url_status="200"
+			boost_url="${url}"
+			break
+		else
+			boost_url_status="403"
+			error_status="boost_url"
+		fi
+	done
+}
+#####################################################################################################################################################
 # This function is where we set your URL that we use with other functions.
 #####################################################################################################################################################
 set_module_urls() {
-	openssl_github_tag="$(git ls-remote -q -t --refs https://github.com/openssl/openssl.git | awk '/openssl/{sub("refs/tags/", "");sub("(.*)(v6|rc|alpha|beta)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n1)"
+	openssl_github_tag="$(github_latest_version "openssl/openssl")"
 	openssl_url="https://github.com/openssl/openssl/archive/${openssl_github_tag}.tar.gz"
 	#
-	wolfssl_github_tag="$(git ls-remote -q -t --refs https://github.com/wolfSSL/wolfssl.git | awk '/v/{sub("refs/tags/", "");sub("(.*)(v6|rc|RC|alpha|beta)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n1)"
+	wolfssl_github_tag="$(github_latest_version "wolfSSL/wolfssl")"
 	wolfssl_github_url="https://github.com/wolfSSL/wolfssl.git"
-	#
-	boost_version="${boost_version:-$(git ls-remote -q -t --refs https://github.com/boostorg/boost.git | awk '{sub("refs/tags/boost-", "");sub("(.*)(rc|alpha|beta)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n1)}"
-	boost_github_tag="boost-${boost_version}"
-	[[ "$LIBTORRENT_GITHUB_TAG" =~ (libtorrent-1_1_*|RC_1_1) ]] && boost_version="1.76.0"
-	boost_github_tag="boost-${boost_version}"
-	boost_url="https://boostorg.jfrog.io/artifactory/main/release/${boost_version}/source/boost_${boost_version//./_}.tar.gz"
-	boost_url_status="$(curl -so /dev/null --head --write-out '%{http_code}' "https://boostorg.jfrog.io/artifactory/main/release/${boost_version}/source/boost_${boost_version//./_}.tar.gz")"
+
+	boost_url
 	boost_github_url="https://github.com/boostorg/boost.git"
-	#
+	[[ "$LIBTORRENT_GITHUB_TAG" =~ (libtorrent-1_1_*|RC_1_1) ]] && boost_version="1.76.0"
+
 	libtorrent_github_url="https://github.com/arvidn/libtorrent.git"
 	#
 	if [[ "$LIBTORRENT_USE_GITHUB_TAG" = "yes" ]]; then
@@ -106,12 +154,12 @@ set_module_urls() {
 	elif [[ "$LIBTORRENT_GITHUB_TAG" = "lm_master" ]]; then
 		libtorrent_github_tag="RC_${libtorrent_version//./_}"
 	else
-		libtorrent_github_tags_list="$(git ls-remote -q -t --refs https://github.com/arvidn/libtorrent.git | awk '/\/v/{sub("refs/tags/", "");sub("(.*)(-[^0-9].*)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV)"
-		libtorrent_github_tag="$(grep -Eom1 "v${libtorrent_version}.([0-9]{1,2})" <<< "${libtorrent_github_tags_list}")"
+		libtorrent_github_tag=$(github_latest_version "arvidn/libtorrent")
+		# libtorrent_github_tag="$(grep -Eom1 "v$libtorrent_version.([0-9]{1,2})" <(curl "https://github.com/arvidn/libtorrent/tags"))"
 	fi
 	#
-	ltconfig_version="$(git ls-remote -q -t --refs https://github.com/ratanakvlun/deluge-ltconfig.git | awk '//{sub("refs/tags/", "");sub("(.*)(v6|rc|alpha|beta)(.*)", ""); print $2 }' | awk '!/^$/' | sort -rV | head -n1)"
-	ltconfig_url="https://github.com/ratanakvlun/deluge-ltconfig/releases/latest/download/ltConfig-${ltconfig_version//v/}.egg"
+	ltconfig_version="$(github_latest_version "ratanakvlun/deluge-ltconfig")"
+	ltconfig_url="$(grep -Eom1 'ht(.*)ltConfig(.*)egg' <(curl "https://api.github.com/repos/ratanakvlun/deluge-ltconfig/releases/latest"))"
 }
 #####################################################################################################################################################
 # This function determines which crypto is default (openssl) and what to do if wolfssl is selected.
@@ -119,9 +167,9 @@ set_module_urls() {
 set_libtorrent_crypto() {
 	pb_libtorrent_crypto=("crypto=openssl" "openssl-lib=$install_dir/openssl-$openssl_github_tag" "openssl-include=$install_dir/openssl-$openssl_github_tag/include")
 	SSL_MODULE="openssl"
-	#
+
 	if [[ "$CRYPTO_TYPE" = 'wolfssl' ]]; then
-		if [[ "$LIBTORRENT_GITHUB_TAG" =~ ^(RC_2_[0-9]|v2[\.0-9]{2,3}[\.0-9]{2,2})$ ]]; then
+		if [[ "$libtorrent_github_tag" =~ ^(RC_2_[0-9]|v2[\.0-9]{2,3}[\.0-9]{2,2})$ ]]; then
 			pb_libtorrent_crypto=("crypto=wolfssl" "wolfssl-lib=$install_dir/wolfssl/src/.libs" "wolfssl-include=$install_dir/wolfssl")
 			SSL_MODULE="wolfssl"
 		else
@@ -325,7 +373,7 @@ installation_modules() {
 		python_short_version="${python_major}.${python_minor}"
 		python_link_version="${python_major}${python_minor}"
 		#
-		echo -e "using gcc : : : <cxxflags>-std=c++${cxxstd:-17} ;${tn}using python : ${python_short_version} : /usr/bin/python${python_short_version} : /usr/include/python${python_short_version} : /usr/lib/python${python_short_version} ;" > "$HOME/user-config.jam"
+		echo -e "using gcc : : : <cxxflags>-std=c++${cxxstd:-20} ;${tn}using python : ${python_short_version} : /usr/bin/python${python_short_version} : /usr/include/python${python_short_version} : /usr/lib/python${python_short_version} ;" > "$HOME/user-config.jam"
 		#
 		## Echo the build directory.
 		echo -e "${tn}${tb}Install Prefix${cend} : ${cg}$install_dir${cend}"
@@ -398,6 +446,7 @@ download_file() {
 		file_name="$install_dir/$1.tar.gz"
 		[[ -f "$file_name" ]] && rm -rf {"${install_dir:?}/$(tar tf "$file_name" | grep -Eom1 "(.*)[^/]")","$file_name"}
 		curl "${url_filename}" -o "$file_name"
+		dir_to_move="${install_dir:?}/$(tar tf "$file_name" | grep -Eom1 "(.*)[^/]")"
 		tar xf "$file_name" -C "$install_dir"
 		mkdir -p "$install_dir/$(tar tf "$file_name" | head -1 | cut -f1 -d"/")${subdir}"
 		cd "$install_dir/$(tar tf "$file_name" | head -1 | cut -f1 -d"/")${subdir}"
@@ -773,12 +822,12 @@ installation_modules "$@" # see functions
 # openssl installation
 #####################################################################################################################################################
 application_name openssl
-#
+
 if [[ "${!app_name_skip:-yes}" = 'no' || "$1" = "$app_name" ]]; then
 	custom_flags_set
 	download_file "$app_name" "${!app_url}"
-	#
-	./config --prefix="$install_dir" threads no-shared no-dso no-comp CXXFLAGS="$CXXFLAGS" CPPFLAGS="$CPPFLAGS" LDFLAGS="$LDFLAGS" 2>&1 | tee "$install_dir/logs/$app_name.log.txt"
+
+	./config --prefix="$install_dir" --libdir="lib" threads no-shared no-dso no-comp CXXFLAGS="$CXXFLAGS" CPPFLAGS="$CPPFLAGS" LDFLAGS="$LDFLAGS" 2>&1 | tee "$install_dir/logs/$app_name.log.txt"
 	make -j"$(nproc)" 2>&1 | tee -a "$install_dir/logs/$app_name.log.txt"
 else
 	application_skip
@@ -803,22 +852,22 @@ fi
 # boost libraries install
 #####################################################################################################################################################
 application_name boost
-#
+
 if [[ "${!app_name_skip:-yes}" = 'no' ]] || [[ "$1" = "$app_name" ]]; then
 	custom_flags_set
-	#
+
 	[[ -d "$install_dir/boost" ]] && delete_function "$app_name"
-	#
+
 	if [[ "$boost_url_status" -eq '200' ]]; then
 		download_file "$app_name" "$boost_url"
-		mv -f "$install_dir/boost_${boost_version//./_}/" "$install_dir/boost"
+		mv -f "${dir_to_move}" "$install_dir/boost"
 		cd "$install_dir/boost"
 	fi
-	#
+
 	if [[ "$boost_url_status" -eq '403' ]]; then
 		download_folder "$app_name" "${!app_github_url}"
 	fi
-	#
+
 	"$install_dir/boost/bootstrap.sh" 2>&1 | tee "$install_dir/logs/$app_name.log.txt"
 	"$install_dir/boost/b2" headers
 else
@@ -828,7 +877,7 @@ fi
 # libtorrent install
 #####################################################################################################################################################
 application_name libtorrent
-#
+
 if [[ "${!app_name_skip:-yes}" = 'no' ]] || [[ "$1" = "$app_name" ]]; then
 	if [[ ! -d "$install_dir/boost" ]]; then
 		echo -e "${tn}${clr}Warning${cend} - You must install the boost module before you can use the libtorrent module"
@@ -844,7 +893,7 @@ if [[ "${!app_name_skip:-yes}" = 'no' ]] || [[ "$1" = "$app_name" ]]; then
 		#
 		cd "$folder_name/bindings/python"
 		#
-		"$install_dir/boost/b2" -j"$(nproc)" "${pb_libtorrent_crypto[@]}" address-model="$(getconf LONG_BIT)" cxxstd="${cxxstd:-17}" fpic=on dht=on encryption=on i2p=on extensions=on variant=release threading=multi libtorrent-link=static boost-link=static cxxflags="$CXXFLAGS" cflags="$CPPFLAGS" linkflags="$LDFLAGS" ${LIBTORRENT_INSTALL_MODULE} 2>&1 | tee "$install_dir/logs/libtorrent.log.txt"
+		"$install_dir/boost/b2" -j"$(nproc)" "${pb_libtorrent_crypto[@]}" address-model="$(getconf LONG_BIT)" cxxstd="${cxxstd:-20}" fpic=on dht=on encryption=on i2p=on extensions=on variant=release threading=multi libtorrent-link=static boost-link=static cxxflags="$CXXFLAGS" cflags="$CPPFLAGS" linkflags="$LDFLAGS -lgcov --coverage" ${LIBTORRENT_INSTALL_MODULE} 2>&1 | tee "$install_dir/logs/libtorrent.log.txt"
 		#
 		[[ -f "$install_dir/libtorrent/bindings/python/libtorrent.so" ]] && cp "$install_dir/libtorrent/bindings/python/libtorrent.so" "$install_dir/completed/libtorrent.so"
 		#

@@ -58,9 +58,10 @@ check_and_install_commands
 # This function sets some compiler flags globally - b2 settings are set in the ~/user-config.jam - this is set in the installation_modules function
 #####################################################################################################################################################
 custom_flags_set() {
-	CXXFLAGS="-std=c++${cxxstd:-17} -fPIC -O3 -march=native"
+	CFLAGS="-std=c++${cxxstd:-20} -fPIC -O3 -march=native -pipe -fstack-clash-protection -fstack-protector-strong -fno-plt -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 -D_GLIBCXX_ASSERTIONS"
 	CPPFLAGS="-I$include_dir -fPIC -O3 -march=native"
-	LDFLAGS="-L$lib_dir"
+	CXXFLAGS="-pipe -fstack-clash-protection -fstack-protector-strong -fno-plt -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 -D_GLIBCXX_ASSERTIONS"
+	LDFLAGS="-L$lib_dir -gz -Wl,-O1,--as-needed,--sort-common,-z,now,-z,pack-relative-relocs,-z,relro"
 }
 #####################################################################################################################################################
 # This function creates our curl function that we use throughout this script.
@@ -368,7 +369,7 @@ installation_modules() {
 		python_short_version="${python_major}.${python_minor}"
 		python_link_version="${python_major}${python_minor}"
 		#
-		echo -e "using gcc : : : <cxxflags>-std=c++${cxxstd:-17} ;${tn}using python : ${python_short_version} : /usr/bin/python${python_short_version} : /usr/include/python${python_short_version} : /usr/lib/python${python_short_version} ;" > "$HOME/user-config.jam"
+		echo -e "using gcc : : : <cxxflags>-std=c++${cxxstd:-20} ;${tn}using python : ${python_short_version} : /usr/bin/python${python_short_version} : /usr/include/python${python_short_version} : /usr/lib/python${python_short_version} ;" > "$HOME/user-config.jam"
 		#
 		## Echo the build directory.
 		echo -e "${tn}${tb}Install Prefix${cend} : ${cg}$install_dir${cend}"
@@ -824,7 +825,6 @@ if [[ "${!app_name_skip:-yes}" = 'no' || "$1" = "$app_name" ]]; then
 
 	./config --prefix="$install_dir" --libdir="lib" threads no-shared no-dso no-comp CXXFLAGS="$CXXFLAGS" CPPFLAGS="$CPPFLAGS" LDFLAGS="$LDFLAGS" 2>&1 | tee "$install_dir/logs/$app_name.log.txt"
 	make -j"$(nproc)" 2>&1 | tee -a "$install_dir/logs/$app_name.log.txt"
-	# make install_sw 2>&1 | tee -a "$install_dir/logs/$app_name.log.txt"
 else
 	application_skip
 fi
@@ -889,7 +889,7 @@ if [[ "${!app_name_skip:-yes}" = 'no' ]] || [[ "$1" = "$app_name" ]]; then
 		#
 		cd "$folder_name/bindings/python"
 		#
-		"$install_dir/boost/b2" -j"$(nproc)" "${pb_libtorrent_crypto[@]}" address-model="$(getconf LONG_BIT)" cxxstd="${cxxstd:-17}" fpic=on dht=on encryption=on i2p=on extensions=on variant=release threading=multi libtorrent-link=static boost-link=static cxxflags="$CXXFLAGS" cflags="$CPPFLAGS" linkflags="$LDFLAGS -lgcov --coverage" ${LIBTORRENT_INSTALL_MODULE} 2>&1 | tee "$install_dir/logs/libtorrent.log.txt"
+		"$install_dir/boost/b2" -j"$(nproc)" "${pb_libtorrent_crypto[@]}" address-model="$(getconf LONG_BIT)" cxxstd="${cxxstd:-20}" fpic=on dht=on encryption=on i2p=on extensions=on variant=release threading=multi libtorrent-link=static boost-link=static cxxflags="$CXXFLAGS" cflags="$CPPFLAGS" linkflags="$LDFLAGS -lgcov --coverage" ${LIBTORRENT_INSTALL_MODULE} 2>&1 | tee "$install_dir/logs/libtorrent.log.txt"
 		#
 		[[ -f "$install_dir/libtorrent/bindings/python/libtorrent.so" ]] && cp "$install_dir/libtorrent/bindings/python/libtorrent.so" "$install_dir/completed/libtorrent.so"
 		#
