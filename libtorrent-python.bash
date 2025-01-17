@@ -95,213 +95,274 @@ fi
 #######################################################################################################################################################
 # Revised dependency check function
 #######################################################################################################################################################
-# Unique package names and package test tools on Debian/Ubuntu and Alpine
-declare -A build_tools
+declare -A core_deps
 if [[ "$os_id" =~ (debian|ubuntu) ]]; then
 	command_test_tool=("dpkg" "-s")
-	command_install=("apt-get" "install" "-y")
-	command_install_array=("bash" "-c" "apt-get update && apt-get upgrade -y && apt-get autoremove -y")
+	command_install_deps=("apt-get" "install" "-y")
+	command_update_upgrade_os=("bash" "-c" "apt-get update && apt-get upgrade -y && apt-get autoremove -y")
 	install_simulation=("apt" "install" "--simulate")
-	build_tools["build-essential"]="false"
-	build_tools["pkg-config"]="false"
-	build_tools["python3-pip"]="false"
-	build_tools["python3-numpy"]="false"
+	core_deps["build-essential"]="false"
+	core_deps["pkg-config"]="false"
+	core_deps["python3-pip"]="false"
+	core_deps["python3-numpy"]="false"
 	# For docker deploys to not get prompted to set the timezone.
 	export DEBIAN_FRONTEND="noninteractive" && TZ="Europe/London"
 elif [[ "$os_id" = "alpine" ]]; then
 	command_test_tool=("apk" "info" "-e")
-	command_install=("apk" "add" "--no-cache")
-	command_install_array=("bash" "-c" "apk add --no-cache && apk upgrade --no-cache")
+	command_install_deps=("apk" "add" "--no-cache")
+	command_update_upgrade_os=("bash" "-c" "apk add --no-cache && apk upgrade --no-cache")
 	install_simulation=("apk" "add" "--simulate")
-	build_tools["build-base"]="false"
-	build_tools["pkgconf"]="false"
-	build_tools["py3-pip"]="false"
-	build_tools["py3-numpy"]="false"
-	build_tools["linux-headers"]="false"
-	build_tools["libffi-dev"]="false"
-	build_tools["zlib-dev"]="false"
-	build_tools["jpeg-dev"]="false"
-	# build_tools["openssl-dev"]="false"
+	core_deps["build-base"]="false"
+	core_deps["pkgconf"]="false"
+	core_deps["py3-pip"]="false"
+	core_deps["py3-numpy"]="false"
+	core_deps["linux-headers"]="false"
+	core_deps["libffi-dev"]="false"
+	core_deps["zlib-dev"]="false"
+	core_deps["jpeg-dev"]="false"
+	# core_deps["openssl-dev"]="false"
 fi
 # consistent package names on Debian/Ubuntu and Alpine
-build_tools["autoconf"]="false"
-build_tools["automake"]="false"
-build_tools["bison"]="false"
-build_tools["cmake"]="false"
-build_tools["curl"]="false"
-build_tools["git"]="false"
-build_tools["libtool"]="false"
-build_tools["perl"]="false"
-build_tools["python3"]="false"
-build_tools["python3-dev"]="false"
+core_deps["autoconf"]="false"
+core_deps["automake"]="false"
+core_deps["bison"]="false"
+core_deps["cmake"]="false"
+core_deps["curl"]="false"
+core_deps["git"]="false"
+core_deps["libtool"]="false"
+core_deps["perl"]="false"
+core_deps["python3"]="false"
+core_deps["python3-dev"]="false"
 # Tools that don't need to be installed if they are available in the PATH to use for basic tests
 declare -A test_tools
-test_tools["root"]="false"
-test_tools["sudo"]="false"
 test_tools["curl"]="false"
 test_tools["git"]="false"
 test_tools["python3"]="false"
 
-_debug() {
-	printf '\n'
-	for i in "${!build_tools[@]}"; do
-		printf '%b\n' "${color_blue}$i${color_end}:${color_green}${build_tools[$i]}${color_end}"
-	done
-
-	printf '\n'
-	for i in "${!test_tools[@]}"; do
-		printf '%b\n' "${color_blue}$i${color_end}:${color_green}${test_tools[$i]}${color_end}"
-	done
-}
+# Define our list privilege checks
+privileges_required["root"]="false"
+privileges_required["sudo"]="false"
 
 if [[ ! "$1" =~ ^-h ]]; then
-
 	_privilege_check() {
-		if [[ "$(id -un)" == 'root' ]]; then
-			printf '\n%b\n' "$unicode_green_circle ${color_yellow}root${color_end}"
-			test_tools["root"]="true"
+		printf '\n%b\n' " ${unicode_blue_light_circle} ${text_bold}Checking: ${color_red_light}available privileges${color_end}"
+
+		if [[ "$(id -un 2> /dev/null)" == 'root' ]]; then
+			printf '\n%b\n' " $unicode_green_circle ${color_red_light}root${color_end}"
+			privileges_required["root"]="true"
 			command_privilege=()
 		else
-			printf '\n%b\n' "$unicode_red_circle ${color_yellow}root${color_end}"
+			printf '\n%b\n' " $unicode_red_circle ${color_red_light}root${color_end}"
+		fi
 
-			if sudo -v &> /dev/null; then
-				printf '%b\n' "${color_yellow}sudo${color_end}: $unicode_green_circle"
-				test_tools["sudo"]="true"
-				command_privilege=("sudo")
-			else
-				printf '%b\n' "${color_yellow}sudo${color_end}: $unicode_red_circle"
-			fi
+		if sudo -n true &> /dev/null; then
+			printf '%b\n' " $unicode_green_circle ${color_red_light}sudo${color_end}"
+			privileges_required["sudo"]="true"
+			command_privilege=("sudo")
+		else
+			printf '%b\n' " $unicode_red_circle ${color_red_light}sudo${color_end}"
 		fi
 	}
 
-	_check_tools_info() {
-		[[ "${1}" != 'silent' ]] && printf '\n%b\n\n' "${unicode_yellow_circle} Checking ${color_magenta}build_tools${color_end}:"
-		for tool in "${!build_tools[@]}"; do
-			if _check_tools_work "${tool}" "build_tools" "${1}"; then
-				build_tools["${tool}"]="true"
-			fi
-		done
-
-		[[ "${1}" != 'silent' ]] && printf '\n%b\n\n' "${unicode_yellow_circle} Checking ${color_magenta}test_tools${color_end}:"
-		for tool in "${!test_tools[@]}"; do
-			if [[ ! $tool =~ (root|sudo) ]]; then
-				if _check_tools_work "${tool}" "test_tools" "${1}"; then
-					test_tools["${tool}"]="true"
-					unset "build_tools[${tool}]"
-				fi
-			fi
-		done
-	}
-
 	_check_tools_work() {
-		tool_type="${2}"
-		run_type="${3}"
+		local tool="${1}"
+		local tool_type="${2}"
+		local run_type="${3}"
 		_command_test() {
 			if [[ $tool_type = "test_tools" ]]; then
-				type -P "${tool}"
+				command -v "${tool}"
 			elif [[ $tool_type = "build_tools" ]]; then
 				"${command_test_tool[@]}" "${tool}"
 			fi
 		}
 
-		width=15
-		tool_length=${#1}
-		((hyphen_count = width - tool_length < 1 ? 1 : width - tool_length))
-		hyphens=$(printf '%*s' "$hyphen_count" ">" | tr ' ' '-')
 		if _command_test &> /dev/null; then
 			if [[ "${run_type}" != "silent" ]]; then
-				printf "%b %s %b\n" "$unicode_green_circle" "$hyphens" "${color_yellow}${1}${color_end}"
+				printf "%b\n" " $unicode_green_circle ${color_yellow}${1}${color_end}"
 			fi
 			return 0
 		else
 			if [[ "${run_type}" != "silent" ]]; then
-				printf "%b %s %b\n" "$unicode_red_circle" "$hyphens" "${color_yellow}${1}${color_end}"
+				printf "%b\n" " $unicode_red_circle ${color_yellow}${1}${color_end}"
 			fi
 			return 1
 		fi
 	}
 
-	_update_os() {
-		if [[ ${test_tools["root"]} == "true" || ${test_tools["sudo"]} == "true" ]]; then
-			printf '\n'
-			"${command_privilege[@]}" "${command_install_array[@]}"
-		fi
+	_check_dependency_status() {
+		local silent="${1:-}"
+
+		filerterd_params=("$pparam")
+		for pparam in "$@"; do
+			if [[ "$pparam" != "silent" ]]; then
+				filerterd_params+=("$pparam")
+			fi
+		done && unset pparam
+
+		[[ "${silent}" != 'silent' ]] && printf '\n%b\n\n' " ${unicode_blue_light_circle} ${text_bold}Checking: ${color_yellow}test_tools${color_end}"
+
+		while IFS= read -r tt; do
+			if _check_tools_work "${tt}" "test_tools" "${silent}"; then
+				test_tools["${tt}"]="true"
+				unset "build_tools[${tt}]"
+			fi
+		done < <(printf '%s\n' "${!test_tools[@]}" | sort)
+
+		# remove packages in the deps_delete arrays from the core_deps array
+
+		for dd in "${!deps_delete[@]}"; do
+			unset "core_deps[${dd}]"
+		done && unset dd
+
+		# remove test_tools packages in the test_tools array from the core_deps array if available via command -v
+		for tt in "${!test_tools[@]}"; do
+			if [[ "${test_tools[$tt]}" == "true" ]]; then
+				unset "core_deps[$tt]"
+			fi
+		done && unset tt
+
+		[[ "${silent}" != 'silent' ]] && printf '\n%b\n\n' " ${unicode_blue_light_circle} ${text_bold}Checking: ${color_magenta}core_dependencies${color_end}"
+
+		# This checks over the core_deps array for the OS specified dependencies to see if they are installed
+		while IFS= read -r pkg; do
+
+			if [[ "${os_id}" =~ ^(alpine)$ ]]; then
+				pkgman() { "${command_privilege[@]}" apk info -e "${pkg}"; }
+			fi
+
+			if [[ "${os_id}" =~ ^(debian|ubuntu)$ ]]; then
+				pkgman() { "${command_privilege[@]}" dpkg -s "${pkg}"; }
+			fi
+
+			if pkgman > /dev/null 2>&1; then
+				[[ "${silent}" != 'silent' ]] && printf '%b\n' " ${unicode_green_circle} ${color_magenta}${pkg}${color_end}"
+				core_deps["${pkg}"]="true"
+			else
+				if [[ -n "${pkg}" ]]; then
+					[[ "${silent}" != 'silent' ]] && printf '%b\n' " ${unicode_red_circle} ${color_magenta}${pkg}${color_end}"
+					core_deps_sorted+=("$pkg")
+					core_deps["${pkg}"]="false"
+				fi
+			fi
+		done < <(printf '%s\n' "${!core_deps[@]}" | sort)
 	}
 
-	_install_tools() {
-		# We don't want to run update every time. Only if the the installation command cannot work without an update being run first
-		if ! "${install_simulation[@]}" curl &> /dev/null; then _update_os; fi
-
-		if [[ ${test_tools["root"]} == "true" || ${test_tools["sudo"]} == "true" ]]; then
-			printf '\n%b\n\n' "${unicode_yellow_circle} Checking build_tools tools:"
-			"${command_install[@]}" "${!build_tools[@]}"
-		fi
-	}
+	_check_dependency_status "${@}"
 
 	_privilege_check
-	_check_tools_info silent
 
-	if [[ $* =~ ([[:space:]]|^)(update)([[:space:]]|$) ]]; then
-		_update_os
-	fi
+	if [[ ${privileges_required["root"]} == "true" || ${privileges_required["sudo"]} == "true" ]]; then
 
-	if [[ $* =~ ([[:space:]]|^)(install)([[:space:]]|$) ]]; then
-		_install_tools
-	fi
+		if [[ "${core_deps[*]}" =~ "false" ]]; then
+			printf '\n%b\n\n' " $unicode_blue_circle ${color_blue}Info:${color_end} $script_full_path"
 
-	if [[ $* =~ ([[:space:]]|^)(bootstrap)([[:space:]]|$) ]]; then
-		_update_os
-		_install_tools
-	fi
-
-	_check_tools_info
-
-	if [[ $* =~ ([[:space:]]|^)(debug)([[:space:]]|$) ]]; then
-		_debug
-	fi
-
-	# Remove these positional parameters from the array after they are used as they are not needed and confuse later checks
-
-	args=("$@")
-	new_args=()
-
-	for arg in "${args[@]}"; do
-		if [[ "$arg" != "debug" && "$arg" != "update" && "$arg" != "install" && "$arg" != "bootstrap" ]]; then
-			new_args+=("$arg")
-		fi
-	done
-
-	set -- "${new_args[@]}"
-
-	if [[ ${test_tools["root"]} == "true" || ${test_tools["sudo"]} == "true" ]]; then
-		printf '\n%b\n\n' "$unicode_blue_circle ${color_blue}Info:${color_end} $script_full_path"
-		printf '%b\n\n' "$unicode_yellow_circle${color_magenta} test_tools${color_end} ${color_blue}are required to access basic features of the script.${color_end}"
-		printf '%b\n' "$unicode_blue_circle ${color_magenta}update${color_end}  - update the system"
-		printf '%b\n' "$unicode_blue_circle ${color_magenta}install${color_end} - install the required build tools"
-		printf '%b\n' "$unicode_blue_circle ${color_magenta}bootstrap${color_end} - update and install the required build tools"
-		printf '%b\n' "$unicode_blue_circle ${color_magenta}all | openssl | wolfssl | boost | libtorrent${color_end} - modules to install"
-	else
-		printf '%b\n' "$unicode_red_circle ${color_yellow}Warning${color_end}: No root or sudo privileges detected. Nothing to do"
-	fi
-
-	if [[ $* =~ ([[:space:]]|^)(all|wolfssl|openssl|libtorrent)([[:space:]]|$) ]]; then
-		for build_reqs in "${!build_tools[@]}"; do
-			if [[ "${build_tools["${build_reqs}"]}" == "false" ]]; then
-				can_we_build="false"
+			if ! "${install_simulation[@]}" bash &> /dev/null; then
+				printf '%b\n' " $unicode_blue_circle ${color_blue_light}$script_basename${color_end} ${color_magenta}update${color_end} ------------ update host"
 			fi
-		done
 
-		if [[ "${can_we_build}" == "false" ]]; then
-			printf '\n%b\n\n' "$unicode_red_circle ${color_yellow}Missing critical ${color_blue}build_tools${color_end}${color_yellow} requirements${color_end}"
-			exit 1
+			if [[ "${test_tools[*]}" =~ "false" ]]; then
+				printf '%b\n' " $unicode_blue_circle ${color_blue_light}$script_basename${color_end} ${color_magenta}install_test${color_end} ------ install test deps"
+			fi
+
+			printf '%b\n' " $unicode_blue_circle ${color_blue_light}$script_basename${color_end} ${color_magenta}install_core${color_end} ------ install core build deps"
+			printf '%b\n' " $unicode_blue_circle ${color_blue_light}$script_basename${color_end} ${color_magenta}bootstrap_deps${color_end} ---- update + install (test + core)"
 		fi
+
+	else
+		printf '\n%b\n\n' " $unicode_red_circle ${color_yellow}Warning${color_end}: No root or sudo privileges detected. Nothing to do"
+		printf '%b\n' " $unicode_red_circle ${color_yellow}Warning${color_end}: ${color_magenta}test_tools${color_end} are required to access basic features of the script.${color_end}"
 	fi
 
-	if [[ "${test_tools[curl]}" == 'false' || "${test_tools[git]}" == 'false' || "${test_tools[python3]}" == 'false' ]]; then
-		printf '\n%b\n\n' "$unicode_red_circle ${color_yellow}Missing critical ${color_blue}test_tools${color_end}${color_yellow} requirements${color_end}"
+	if [[ "${test_tools[*]}" =~ "false" ]]; then
+		printf '\n%b\n' " $unicode_red_circle ${color_yellow}Warning:${color_end} Missing critical ${color_magenta}test_tools${color_end} requirements${color_end}"
+	fi
+
+	if [[ "${core_deps[*]}" =~ "false" ]]; then
+		printf '\n%b\n' " $unicode_red_circle ${color_yellow}Warning:${color_end} Missing critical ${color_magenta}build_tools${color_end} requirements${color_end}"
+	fi
+
+	# Check if user is able to install the dependencies, if yes then do so, if no then exit.
+	if [[ ${privileges_required["root"]} == "true" || ${privileges_required["sudo"]} == "true" ]]; then
+
+		_update_os() {
+			printf '\n%b\n\n' " ${unicode_blue_light_circle} ${color_green}Updating${color_end}"
+			"${command_privilege[@]}" "${command_update_upgrade_os[@]}"
+			# needed to use these functions in the -bs flags
+			declare -fx _update_os
+		}
+
+		_install_tools() {
+			# We don't want to run update every time. Only if the the installation command cannot work without an update being run first
+			if ! "${install_simulation[@]}" bash &> /dev/null; then _update_os; fi
+
+			if [[ "${1}" = "test" ]]; then
+				printf '\n%b\n\n' " ${unicode_blue_light_circle}${color_green} Installing test dependencies${color_end}"
+			elif [[ "${1}" = "core" ]]; then
+				printf '\n%b\n\n' " ${unicode_blue_light_circle}${color_green} Installing core dependencies${color_end}"
+			fi
+
+			if [[ "${1}" = "test" ]]; then
+				for tt in "${!test_tools[@]}"; do
+					if [[ $tt != "root" && $tt != "sudo" ]]; then
+						"${command_install_deps[@]}" "$tt"
+					fi
+				done && unset tt
+			fi
+
+			if [[ "${1}" = "core" ]]; then
+				"${command_install_deps[@]}" "${core_deps_sorted[@]}"
+			fi
+			# needed to use these functions in the -bs flags
+			declare -fx _install_tools
+		}
+
+		if [[ $* =~ ([[:space:]]|^)(update)([[:space:]]|$) ]]; then
+			_update_os
+		elif [[ $* =~ ([[:space:]]|^)(install_test)([[:space:]]|$) ]]; then
+			_install_tools test
+		elif [[ $* =~ ([[:space:]]|^)(install_core)([[:space:]]|$) ]]; then
+			_install_tools core
+		elif [[ $* =~ ([[:space:]]|^)(bootstrap_deps)([[:space:]]|$) ]]; then
+			_update_os
+			_install_tools core
+		fi
+
+		_check_dependency_status silent "${@}"
+
+	else
+		printf '\n%b\n' " ${text_bold}Please request or install the missing core dependencies before using this script${color_end}"
+		if [[ "${os_id}" =~ ^(alpine)$ ]]; then
+			printf '\n%b\n\n' " ${color_red_light}apk add${color_end} ${core_deps_sorted[*]}"
+		elif [[ "${os_id}" =~ ^(debian|ubuntu)$ ]]; then
+			printf '\n%b\n\n' " ${color_red_light}apt-get install -y${color_end} ${core_deps_sorted[*]}"
+		fi
 		exit 1
 	fi
 
+	if [[ "${test_tools[*]}" =~ "false" ]]; then
+		printf '\n'
+		exit 1
+	fi
+
+	# for mi in "${!modules_install[@]}"; do
+	# 	if [[ "${filerterd_params[*]}" =~ ([[:space:]]|^)${mi}([[:space:]]|$) ]]; then
+	# 		if [[ "${core_deps[*]}" =~ "false" ]]; then
+	# 			printf '\n'
+	# 			exit 1
+	# 		fi
+	# 	fi
+	# done && unset mi
+
+	if [[ ! "${core_deps[*]}" =~ "false" ]]; then
+		printf '\n%b\n' " ${unicode_green_circle}${text_bold} Dependencies: All checks passed, continuing to build${color_end}"
+	fi
+
+	declare -a excluded_args=("debug" "update" "install_test" "install_core" "bootstrap" "bootstrap_deps")
+	for arg in "${@}"; do
+		if [[ ! "${excluded_args[*]}" =~ ([[:space:]]|^)(${arg})([[:space:]]|$) ]]; then
+			declare -g reset_cd_args+=("$arg")
+		fi
+	done
 fi
 #####################################################################################################################################################
 # This function sets some compiler flags globally - b2 settings are set in the ~/user-config.jam - this is set in the installation_modules function
