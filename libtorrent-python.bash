@@ -318,11 +318,17 @@ if [[ ! "$1" =~ ^-h ]]; then
 
 		if [[ $* =~ ([[:space:]]|^)(update)([[:space:]]|$) ]]; then
 			_update_os
-		elif [[ $* =~ ([[:space:]]|^)(install_test)([[:space:]]|$) ]]; then
+		fi
+
+		if [[ $* =~ ([[:space:]]|^)(install_test)([[:space:]]|$) ]]; then
 			_install_tools test
-		elif [[ $* =~ ([[:space:]]|^)(install_core)([[:space:]]|$) ]]; then
+		fi
+
+		if [[ $* =~ ([[:space:]]|^)(install_core)([[:space:]]|$) ]]; then
 			_install_tools core
-		elif [[ $* =~ ([[:space:]]|^)(bootstrap_deps)([[:space:]]|$) ]]; then
+		fi
+
+		if [[ $* =~ ([[:space:]]|^)(bootstrap_deps)([[:space:]]|$) ]]; then
 			_update_os
 			_install_tools core
 		fi
