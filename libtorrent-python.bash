@@ -23,11 +23,11 @@
 ## Script start ###############################################################
 set -ea # https://www.gnu.org/software/bash/manual/html_node/The-Set-Builtin.html
 
-unset PARAMS build_dir skip_delete GITHUB_TAG libtorrent_git_tag git_proxy curl_proxy test_build modules_test crypto_type # Make sure this array of variables is reset to null when the script is loaded.
+unset PARAMS build_dir skip_delete GITHUB_TAG libtorrent_github_tag git_proxy curl_proxy test_build modules_test crypto_type # Make sure this array of variables is reset to null when the script is loaded.
 
 script_full_path=$(readlink -f "${BASH_SOURCE[0]}")
-script_basename="${script_full_path##*/}"
-script_path="${script_full_path%/*}"
+script_parent_path="${script_full_path##*/}"
+script_basename="${script_full_path%/*}"
 libtorrent_version='2.0' # Set this here so it is easy to see and change
 
 #
@@ -67,51 +67,51 @@ color_end="\e[0m"
 #######################################################################################################################################################
 # Check we are on a supported OS and release.
 #######################################################################################################################################################
-get_os_info() { # Function to source /etc/os-release and get info from it on demand.
+get_os_info() {
 	# shellcheck source=/dev/null
 	if source /etc/os-release &> /dev/null; then
-		printf "%s" "${!1%_*}" # the exansion part is specific to the Alpine VERSION_ID format 1.2.3_alpha but won't break anything in Debian based format. 12/24.04
+		printf "%s" "${!1%_*}" # the expansion part is specific to the Alpine VERSION_ID format 1.2.3_alpha but won't break anything in Debian based format e.g. 12/24.04
 	else
 		printf "%s" "unknown" # This will make the script exit on the version check and provide useful reason.
 	fi
 }
 
-os_id="$(get_os_info ID)"                                                         # Get the ID for this this OS.
-os_version_codename="$(get_os_info VERSION_CODENAME)"                             # Get the codename for this this OS. Note, Alpine does not have a unique codename.
-os_version_id="$(get_os_info VERSION_ID)"                                         # Get the version number for this codename, for example: 10, 20.04, 3.12.4
-[[ "$(wc -w <<< "${os_version_id//\./ }")" -eq "2" ]] && alpine_min_version="310" # Account for variation in the versioning 3.1 or 3.1.0 to make sure the check works correctly
-[[ "${os_id}" =~ ^(alpine)$ ]] && os_version_codename="alpine"                    # If alpine, set the codename to alpine. We check for min v3.10 later with codenames.
+os_id="$(get_os_info ID)"                                    # Get the ID for this OS.
+os_version_codename="$(get_os_info VERSION_CODENAME)"        # Get the codename for this OS. Note, Alpine does not have a unique codename.
+os_version_id="$(get_os_info VERSION_ID)"                    # Get the version number for this codename, for example: 10, 20.04, 3.12.4
+[[ ${os_id} =~ ^(alpine)$ ]] && os_version_codename="alpine" # If alpine, set the codename to alpine. We check for min v3.10 later with codenames.
+
+if [[ ${os_id} =~ ^(debian|ubuntu)$ ]]; then
+	# dpkg --print-architecture give amd64/arm64 and arch gives x86_64/aarch64
+	os_arch="$(dpkg --print-architecture)"
+elif [[ ${os_id} =~ ^(alpine)$ ]]; then
+	# apk --print-arch gives x86_64/aarch64
+	os_arch="$(apk --print-arch)"
+fi
 
 # Check against allowed codenames or if the codename is alpine version greater than 3.10
-if [[ ! "${os_version_codename}" =~ ^(alpine|bullseye|bookworm|jammy|noble)$ ]] || [[ "${os_version_codename}" =~ ^(alpine)$ && "${os_version_id//\./}" -lt "${alpine_min_version:-3100}" ]]; then
+if [[ ! ${os_version_codename} =~ ^(alpine|trixie|noble)$ ]] || [[ ${os_version_codename} =~ ^(alpine)$ && "$(apk version -t "${os_version_id}" "3.18")" == "<" ]]; then
 	printf '\n%b\n\n' " ${unicode_red_circle} ${color_yellow} This is not a supported OS. There is no reason to continue.${color_end}"
 	printf '%b\n\n' " id: ${text_dim}${color_yellow_light}${os_id}${color_end} codename: ${text_dim}${color_yellow_light}${os_version_codename}${color_end} version: ${text_dim}${color_red_light}${os_version_id}${color_end}"
 	printf '%b\n\n' " ${unicode_yellow_circle} ${text_dim}These are the supported platforms${color_end}"
-	printf '%b\n' " ${color_magenta_light}Debian${color_end} - ${color_blue_light}bullseye${color_end} - ${color_blue_light}bookworm${color_end}"
-	printf '%b\n' " ${color_magenta_light}Ubuntu${color_end} - ${color_blue_light}jammy${color_end} - ${color_blue_light}noble${color_end}"
-	printf '%b\n\n' " ${color_magenta_light}Alpine${color_end} - ${color_blue_light}3.10.0${color_end} ${text_dim}or greater${color_end}"
-	exit 1
+	printf '%b\n' " ${color_magenta_light}Debian${color_end} - ${color_blue_light}trixie${color_end}"
+	printf '%b\n' " ${color_magenta_light}Ubuntu${color_end} - ${color_blue_light}noble${color_end}"
+	printf '%b\n\n' " ${color_magenta_light}Alpine${color_end} - ${color_blue_light}3.18${color_end} ${text_dim}or greater${color_end}"
+	exit
 fi
 #######################################################################################################################################################
 # Revised dependency check function
 #######################################################################################################################################################
-declare -A core_deps
-if [[ "$os_id" =~ (debian|ubuntu) ]]; then
-	command_test_tool=("dpkg" "-s")
-	command_install_deps=("apt-get" "install" "-y")
-	command_update_upgrade_os=("bash" "-c" "apt-get update && apt-get upgrade -y && apt-get autoremove -y")
-	install_simulation=("apt" "install" "--simulate")
+declare -A core_deps deps_delete modules_delete
+
+if [[ $os_id =~ (debian|ubuntu) ]]; then
 	core_deps["build-essential"]="false"
 	core_deps["pkg-config"]="false"
 	core_deps["python3-pip"]="false"
 	core_deps["python3-numpy"]="false"
 	# For docker deploys to not get prompted to set the timezone.
 	export DEBIAN_FRONTEND="noninteractive" && TZ="Europe/London"
-elif [[ "$os_id" = "alpine" ]]; then
-	command_test_tool=("apk" "info" "-e")
-	command_install_deps=("apk" "add" "--no-cache")
-	command_update_upgrade_os=("bash" "-c" "apk add --no-cache && apk upgrade --no-cache")
-	install_simulation=("apk" "add" "--simulate")
+elif [[ $os_id == "alpine" ]]; then
 	core_deps["build-base"]="false"
 	core_deps["pkgconf"]="false"
 	core_deps["py3-pip"]="false"
@@ -139,237 +139,262 @@ test_tools["curl"]="false"
 test_tools["git"]="false"
 test_tools["python3"]="false"
 
+declare -A modules_install
+modules_install["all"]="true"
+modules_install["install_deluge"]="true"
+modules_install["openssl"]="true"
+modules_install["wolfssl"]="true"
+modules_install["boost"]="true"
+modules_install["libtorrent"]="true"
+
 # Define our list privilege checks
 privileges_required["root"]="false"
 privileges_required["sudo"]="false"
 
-if [[ ! "$1" =~ ^-h ]]; then
-	_privilege_check() {
-		printf '\n%b\n' " ${unicode_blue_light_circle} ${text_bold}Checking: ${color_red_light}available privileges${color_end}"
+pkgman=()
+command_test_tool=()
+command_install_deps=()
+command_update_upgrade_os=()
+install_simulation=()
 
-		if [[ "$(id -un 2> /dev/null)" == 'root' ]]; then
-			printf '\n%b\n' " $unicode_green_circle ${color_red_light}root${color_end}"
-			privileges_required["root"]="true"
-			command_privilege=()
-		else
-			printf '\n%b\n' " $unicode_red_circle ${color_red_light}root${color_end}"
-		fi
+_privilege_check() {
+	printf '\n%b\n' " ${unicode_blue_light_circle} ${text_bold}Checking: ${color_red_light}available privileges${color_end}"
 
-		if sudo -n true &> /dev/null; then
-			printf '%b\n' " $unicode_green_circle ${color_red_light}sudo${color_end}"
-			privileges_required["sudo"]="true"
-			command_privilege=("sudo")
-		else
-			printf '%b\n' " $unicode_red_circle ${color_red_light}sudo${color_end}"
-		fi
-	}
-
-	_check_tools_work() {
-		local tool="${1}"
-		local tool_type="${2}"
-		local run_type="${3}"
-		_command_test() {
-			if [[ $tool_type = "test_tools" ]]; then
-				command -v "${tool}"
-			elif [[ $tool_type = "build_tools" ]]; then
-				"${command_test_tool[@]}" "${tool}"
-			fi
-		}
-
-		if _command_test &> /dev/null; then
-			if [[ "${run_type}" != "silent" ]]; then
-				printf "%b\n" " $unicode_green_circle ${color_yellow}${1}${color_end}"
-			fi
-			return 0
-		else
-			if [[ "${run_type}" != "silent" ]]; then
-				printf "%b\n" " $unicode_red_circle ${color_yellow}${1}${color_end}"
-			fi
-			return 1
-		fi
-	}
-
-	_check_dependency_status() {
-		local silent="${1:-}"
-
-		filerterd_params=("$pparam")
-		for pparam in "$@"; do
-			if [[ "$pparam" != "silent" ]]; then
-				filerterd_params+=("$pparam")
-			fi
-		done && unset pparam
-
-		[[ "${silent}" != 'silent' ]] && printf '\n%b\n\n' " ${unicode_blue_light_circle} ${text_bold}Checking: ${color_yellow}test_tools${color_end}"
-
-		while IFS= read -r tt; do
-			if _check_tools_work "${tt}" "test_tools" "${silent}"; then
-				test_tools["${tt}"]="true"
-				unset "build_tools[${tt}]"
-			fi
-		done < <(printf '%s\n' "${!test_tools[@]}" | sort)
-
-		# remove packages in the deps_delete arrays from the core_deps array
-
-		for dd in "${!deps_delete[@]}"; do
-			unset "core_deps[${dd}]"
-		done && unset dd
-
-		# remove test_tools packages in the test_tools array from the core_deps array if available via command -v
-		for tt in "${!test_tools[@]}"; do
-			if [[ "${test_tools[$tt]}" == "true" ]]; then
-				unset "core_deps[$tt]"
-			fi
-		done && unset tt
-
-		[[ "${silent}" != 'silent' ]] && printf '\n%b\n\n' " ${unicode_blue_light_circle} ${text_bold}Checking: ${color_magenta}core_dependencies${color_end}"
-
-		# This checks over the core_deps array for the OS specified dependencies to see if they are installed
-		while IFS= read -r pkg; do
-
-			if [[ "${os_id}" =~ ^(alpine)$ ]]; then
-				pkgman() { "${command_privilege[@]}" apk info -e "${pkg}"; }
-			fi
-
-			if [[ "${os_id}" =~ ^(debian|ubuntu)$ ]]; then
-				pkgman() { "${command_privilege[@]}" dpkg -s "${pkg}"; }
-			fi
-
-			if pkgman > /dev/null 2>&1; then
-				[[ "${silent}" != 'silent' ]] && printf '%b\n' " ${unicode_green_circle} ${color_magenta}${pkg}${color_end}"
-				core_deps["${pkg}"]="true"
-			else
-				if [[ -n "${pkg}" ]]; then
-					[[ "${silent}" != 'silent' ]] && printf '%b\n' " ${unicode_red_circle} ${color_magenta}${pkg}${color_end}"
-					core_deps_sorted+=("$pkg")
-					core_deps["${pkg}"]="false"
-				fi
-			fi
-		done < <(printf '%s\n' "${!core_deps[@]}" | sort)
-	}
-
-	_check_dependency_status "${@}"
-
-	_privilege_check
-
-	if [[ ${privileges_required["root"]} == "true" || ${privileges_required["sudo"]} == "true" ]]; then
-
-		if [[ "${core_deps[*]}" =~ "false" ]]; then
-			printf '\n%b\n\n' " $unicode_blue_circle ${color_blue}Info:${color_end} $script_full_path"
-
-			if ! "${install_simulation[@]}" bash &> /dev/null; then
-				printf '%b\n' " $unicode_blue_circle ${color_blue_light}$script_basename${color_end} ${color_magenta}update${color_end} ------------ update host"
-			fi
-
-			if [[ "${test_tools[*]}" =~ "false" ]]; then
-				printf '%b\n' " $unicode_blue_circle ${color_blue_light}$script_basename${color_end} ${color_magenta}install_test${color_end} ------ install test deps"
-			fi
-
-			printf '%b\n' " $unicode_blue_circle ${color_blue_light}$script_basename${color_end} ${color_magenta}install_core${color_end} ------ install core build deps"
-			printf '%b\n' " $unicode_blue_circle ${color_blue_light}$script_basename${color_end} ${color_magenta}bootstrap_deps${color_end} ---- update + install (test + core)"
-		fi
-
+	if [[ "$(id -un 2> /dev/null)" == 'root' ]]; then
+		printf '\n%b\n' " $unicode_green_circle ${color_red_light}root${color_end}"
+		privileges_required["root"]="true"
+		command_privilege=()
 	else
-		printf '\n%b\n\n' " $unicode_red_circle ${color_yellow}Warning${color_end}: No root or sudo privileges detected. Nothing to do"
-		printf '%b\n' " $unicode_red_circle ${color_yellow}Warning${color_end}: ${color_magenta}test_tools${color_end} are required to access basic features of the script.${color_end}"
+		printf '\n%b\n' " $unicode_red_circle ${color_red_light}root${color_end}"
 	fi
 
-	if [[ "${test_tools[*]}" =~ "false" ]]; then
-		printf '\n%b\n' " $unicode_red_circle ${color_yellow}Warning:${color_end} Missing critical ${color_magenta}test_tools${color_end} requirements${color_end}"
-	fi
-
-	if [[ "${core_deps[*]}" =~ "false" ]]; then
-		printf '\n%b\n' " $unicode_red_circle ${color_yellow}Warning:${color_end} Missing critical ${color_magenta}build_tools${color_end} requirements${color_end}"
-	fi
-
-	# Check if user is able to install the dependencies, if yes then do so, if no then exit.
-	if [[ ${privileges_required["root"]} == "true" || ${privileges_required["sudo"]} == "true" ]]; then
-
-		_update_os() {
-			printf '\n%b\n\n' " ${unicode_blue_light_circle} ${color_green}Updating${color_end}"
-			"${command_privilege[@]}" "${command_update_upgrade_os[@]}"
-			# needed to use these functions in the -bs flags
-			declare -fx _update_os
-		}
-
-		_install_tools() {
-			# We don't want to run update every time. Only if the the installation command cannot work without an update being run first
-			if ! "${install_simulation[@]}" bash &> /dev/null; then _update_os; fi
-
-			if [[ "${1}" = "test" ]]; then
-				printf '\n%b\n\n' " ${unicode_blue_light_circle}${color_green} Installing test dependencies${color_end}"
-			elif [[ "${1}" = "core" ]]; then
-				printf '\n%b\n\n' " ${unicode_blue_light_circle}${color_green} Installing core dependencies${color_end}"
-			fi
-
-			if [[ "${1}" = "test" ]]; then
-				for tt in "${!test_tools[@]}"; do
-					if [[ $tt != "root" && $tt != "sudo" ]]; then
-						"${command_install_deps[@]}" "$tt"
-					fi
-				done && unset tt
-			fi
-
-			if [[ "${1}" = "core" ]]; then
-				"${command_install_deps[@]}" "${core_deps_sorted[@]}"
-			fi
-			# needed to use these functions in the -bs flags
-			declare -fx _install_tools
-		}
-
-		if [[ $* =~ ([[:space:]]|^)(update)([[:space:]]|$) ]]; then
-			_update_os
-		fi
-
-		if [[ $* =~ ([[:space:]]|^)(install_test)([[:space:]]|$) ]]; then
-			_install_tools test
-		fi
-
-		if [[ $* =~ ([[:space:]]|^)(install_core)([[:space:]]|$) ]]; then
-			_install_tools core
-		fi
-
-		if [[ $* =~ ([[:space:]]|^)(bootstrap_deps)([[:space:]]|$) ]]; then
-			_update_os
-			_install_tools core
-		fi
-
-		_check_dependency_status silent "${@}"
-
+	if sudo -n true &> /dev/null; then
+		printf '%b\n' " $unicode_green_circle ${color_red_light}sudo${color_end}"
+		privileges_required["sudo"]="true"
+		command_privilege=("sudo")
 	else
-		printf '\n%b\n' " ${text_bold}Please request or install the missing core dependencies before using this script${color_end}"
-		if [[ "${os_id}" =~ ^(alpine)$ ]]; then
-			printf '\n%b\n\n' " ${color_red_light}apk add${color_end} ${core_deps_sorted[*]}"
-		elif [[ "${os_id}" =~ ^(debian|ubuntu)$ ]]; then
-			printf '\n%b\n\n' " ${color_red_light}apt-get install -y${color_end} ${core_deps_sorted[*]}"
+		printf '%b\n' " $unicode_red_circle ${color_red_light}sudo${color_end}"
+	fi
+
+	if [[ $os_id =~ (debian|ubuntu) ]]; then
+		pkgman+=("${command_privilege[@]}" "dpkg" "-s")
+		command_test_tool+=("${command_privilege[@]}" "dpkg" "-s")
+		command_install_deps+=("${command_privilege[@]}" "apt-get" "install" "-y")
+		command_update_upgrade_os+=("${command_privilege[@]}" "bash" "-c" "apt-get update && apt-get upgrade -y && apt-get autoremove -y")
+		install_simulation+=("${command_privilege[@]}" "apt" "install" "--simulate")
+	elif [[ $os_id == "alpine" ]]; then
+		pkgman+=("${command_privilege[@]}" "apk" "info" "-e" "--no-cache")
+		command_test_tool+=("${command_privilege[@]}" "apk" "info" "-e" "--no-cache")
+		command_install_deps+=("${command_privilege[@]}" "apk" "add" "-u" "--no-cache")
+		command_update_upgrade_os+=("${command_privilege[@]}" "bash" "-c" "apk add --no-cache && apk upgrade --no-cache")
+		install_simulation+=("${command_privilege[@]}" "apk" "add" "--simulate" "--no-cache")
+	fi
+}
+
+_check_tools_work() {
+	local tool="${1}"
+	local tool_type="${2}"
+	local run_type="${3}"
+	_command_test() {
+		if [[ $tool_type == "test_tools" ]]; then
+			command -v "${tool}"
+		elif [[ $tool_type == "build_tools" ]]; then
+			"${command_test_tool[@]}" "${tool}"
 		fi
-		exit 1
-	fi
+	}
 
-	if [[ "${test_tools[*]}" =~ "false" ]]; then
-		printf '\n'
-		exit 1
-	fi
-
-	# for mi in "${!modules_install[@]}"; do
-	# 	if [[ "${filerterd_params[*]}" =~ ([[:space:]]|^)${mi}([[:space:]]|$) ]]; then
-	# 		if [[ "${core_deps[*]}" =~ "false" ]]; then
-	# 			printf '\n'
-	# 			exit 1
-	# 		fi
-	# 	fi
-	# done && unset mi
-
-	if [[ ! "${core_deps[*]}" =~ "false" ]]; then
-		printf '\n%b\n' " ${unicode_green_circle}${text_bold} Dependencies: All checks passed, continuing to build${color_end}"
-	fi
-
-	declare -a excluded_args=("debug" "update" "install_test" "install_core" "bootstrap" "bootstrap_deps")
-	for arg in "${@}"; do
-		if [[ ! "${excluded_args[*]}" =~ ([[:space:]]|^)(${arg})([[:space:]]|$) ]]; then
-			declare -g reset_cd_args+=("$arg")
+	if _command_test &> /dev/null; then
+		if [[ ${run_type} != "silent" ]]; then
+			printf "%b\n" " $unicode_green_circle ${color_yellow}${1}${color_end}"
 		fi
-	done
+		return 0
+	else
+		if [[ ${run_type} != "silent" ]]; then
+			printf "%b\n" " $unicode_red_circle ${color_yellow}${1}${color_end}"
+		fi
+		return 1
+	fi
+}
+
+_check_dependency_status() {
+	local silent="${1:-}"
+
+	filtered_params=()
+	for pparam in "$@"; do
+		if [[ $pparam != "silent" ]]; then
+			filtered_params+=("$pparam")
+		fi
+	done && unset pparam
+
+	[[ ${silent} != 'silent' ]] && printf '\n%b\n\n' " ${unicode_blue_light_circle} ${text_bold}Checking: ${color_yellow}test${color_end}"
+
+	while IFS= read -r tt; do
+		if _check_tools_work "${tt}" "test_tools" "${silent}"; then
+			test_tools["${tt}"]="true"
+			unset "build_tools[${tt}]"
+		fi
+	done < <(printf '%s\n' "${!test_tools[@]}" | sort)
+
+	# remove packages in the deps_delete arrays from the core_deps array
+
+	for dd in "${!deps_delete[@]}"; do
+		unset "core_deps[${dd}]"
+	done && unset dd
+
+	# remove test_tools packages in the test_tools array from the core_deps array if available via command -v
+	for tt in "${!test_tools[@]}"; do
+		if [[ ${test_tools[$tt]} == "true" ]]; then
+			unset "core_deps[$tt]"
+		fi
+	done && unset tt
+
+	[[ ${silent} != 'silent' ]] && printf '\n%b\n\n' " ${unicode_blue_light_circle} ${text_bold}Checking: ${color_magenta}core${color_end}"
+
+	# This checks over the core_deps array for the OS specified dependencies to see if they are installed
+	while IFS= read -r pkg; do
+
+		pkgman() { "${pkgman[@]}" "${pkg}"; }
+
+		if pkgman > /dev/null 2>&1; then
+			[[ ${silent} != 'silent' ]] && printf '%b\n' " ${unicode_green_circle} ${color_magenta}${pkg}${color_end}"
+			core_deps["${pkg}"]="true"
+		else
+			if [[ -n ${pkg} ]]; then
+				[[ ${silent} != 'silent' ]] && printf '%b\n' " ${unicode_red_circle} ${color_magenta}${pkg}${color_end}"
+				core_deps_sorted+=("$pkg")
+				core_deps["${pkg}"]="false"
+			fi
+		fi
+	done < <(printf '%s\n' "${!core_deps[@]}" | sort)
+}
+
+_privilege_check
+
+_check_dependency_status "${@}"
+
+if [[ ${privileges_required["root"]} == "true" || ${privileges_required["sudo"]} == "true" ]]; then
+
+	if [[ ${core_deps[*]} =~ "false" ]]; then
+		printf '\n%b\n\n' " $unicode_blue_circle ${color_blue}Info:${color_end} $script_full_path"
+
+		if ! "${install_simulation[@]}" "${!test_tools[@]}" &> /dev/null; then
+			printf '%b\n' " $unicode_blue_circle ${color_blue_light}$script_parent_path${color_end} ${color_magenta}update${color_end} ------------ update host - package simulation failed"
+		fi
+
+		if [[ ${test_tools[*]} =~ "false" ]]; then
+			printf '%b\n' " $unicode_blue_circle ${color_blue_light}$script_parent_path${color_end} ${color_yellow}install_test${color_end} ------ installs minimum required tools to run tests"
+		fi
+
+		printf '%b\n' " $unicode_blue_circle ${color_blue_light}$script_parent_path${color_end} ${color_magenta}install_core${color_end} ------ installs required build tools to use script"
+
+		if ! "${install_simulation[@]}" "${!test_tools[@]}" &> /dev/null; then
+			printf '%b\n' " $unicode_blue_circle ${color_blue_light}$script_parent_path${color_end} ${color_green_light}bootstrap_deps${color_end} ---- ${color_magenta}update${color_end} + ${color_yellow}install_test${color_end} + ${color_magenta}install_core${color_end}"
+		else
+			printf '%b\n' " $unicode_blue_circle ${color_blue_light}$script_parent_path${color_end} ${color_green_light}bootstrap_deps${color_end} ---- ${color_yellow}install_test${color_end} + ${color_magenta}install_core${color_end}"
+		fi
+	fi
+else
+	printf '\n%b\n\n' " $unicode_red_circle ${color_yellow}Warning${color_end}: No root or sudo privileges detected. Nothing to do"
+	printf '%b\n' " $unicode_red_circle ${color_yellow}Warning${color_end}: ${color_magenta}test_tools${color_end} are required to access basic features of the script.${color_end}"
 fi
+
+if [[ ${test_tools[*]} =~ "false" ]]; then
+	printf '\n%b\n' " $unicode_red_circle ${color_yellow}Warning:${color_end} Missing required ${color_magenta}test_tools${color_end}"
+fi
+
+if [[ ${core_deps[*]} =~ "false" ]]; then
+	printf '\n%b\n' " $unicode_red_circle ${color_yellow}Warning:${color_end} Missing required components of ${color_magenta}install_core${color_end}"
+fi
+
+# Check if user is able to install the dependencies, if yes then do so, if no then exit.
+if [[ ${privileges_required["root"]} == "true" || ${privileges_required["sudo"]} == "true" ]]; then
+
+	_update_os() {
+		printf '\n%b\n\n' " ${unicode_blue_light_circle} ${color_green}Updating${color_end}"
+		"${command_update_upgrade_os[@]}"
+		# needed to use these functions in the -bs flags
+		declare -fx _update_os
+	}
+
+	_install_tools() {
+		# We don't want to run update every time. Only if the the installation command cannot work without an update being run first
+		if ! "${install_simulation[@]}" "${!test_tools[@]}" &> /dev/null; then _update_os; fi
+
+		if [[ ${1} == "test" ]]; then
+			printf '\n%b\n\n' " ${unicode_blue_light_circle}${color_green} Installing test dependencies${color_end}"
+		elif [[ ${1} == "core" ]]; then
+			printf '\n%b\n\n' " ${unicode_blue_light_circle}${color_green} Installing core dependencies${color_end}"
+		fi
+
+		if [[ ${1} == "test" ]]; then
+			for tt in "${!test_tools[@]}"; do
+				if [[ $tt != "root" && $tt != "sudo" ]]; then
+					"${command_install_deps[@]}" "$tt"
+				fi
+			done && unset tt
+		fi
+
+		if [[ ${1} == "core" ]]; then
+			"${command_install_deps[@]}" "${core_deps_sorted[@]}"
+		fi
+		# needed to use these functions in the -bs flags
+		declare -fx _install_tools
+	}
+
+	if [[ $* =~ ([[:space:]]|^)(update)([[:space:]]|$) ]]; then
+		_update_os
+	fi
+
+	if [[ $* =~ ([[:space:]]|^)(install_test)([[:space:]]|$) ]]; then
+		_install_tools test
+	fi
+
+	if [[ $* =~ ([[:space:]]|^)(install_core)([[:space:]]|$) ]]; then
+		_install_tools core
+	fi
+
+	if [[ $* =~ ([[:space:]]|^)(bootstrap_deps)([[:space:]]|$) ]]; then
+		_update_os
+		_install_tools core
+	fi
+
+	_check_dependency_status silent "${@}"
+else
+	printf '\n%b\n' " ${text_bold}Please request or install the missing core dependencies before using this script${color_end}"
+	if [[ ${os_id} =~ ^(alpine)$ ]]; then
+		printf '\n%b\n\n' " ${color_red_light}apk add${color_end} ${core_deps_sorted[*]}"
+	elif [[ ${os_id} =~ ^(debian|ubuntu)$ ]]; then
+		printf '\n%b\n\n' " ${color_red_light}apt-get install -y${color_end} ${core_deps_sorted[*]}"
+	fi
+	exit
+fi
+
+if [[ ${test_tools[*]} =~ "false" ]]; then
+	printf '\n'
+	exit
+fi
+
+for mi in "${!modules_install[@]}"; do
+	if [[ ${filtered_params[*]} =~ ([[:space:]]|^)${mi}([[:space:]]|$) ]]; then
+		if [[ ${core_deps[*]} =~ "false" ]]; then
+			printf '\n'
+			exit
+		fi
+	fi
+done && unset mi
+
+if [[ ! ${core_deps[*]} =~ "false" ]]; then
+	printf '\n%b\n' " ${unicode_green_circle}${text_bold} Dependencies: All checks passed, continuing to build${color_end}"
+fi
+
+declare -a modules_excluded=("debug" "update" "install_test" "install_core" "bootstrap_deps")
+for arg in "${@}"; do
+	if [[ ! ${modules_excluded[*]} =~ ([[:space:]]|^)(${arg})([[:space:]]|$) ]]; then
+		declare -ga filtered_check_dependency_args+=("$arg")
+	fi
+done
+
+set -- "${filtered_check_dependency_args[@]}"
 #####################################################################################################################################################
 # This function sets some compiler flags globally - b2 settings are set in the ~/user-config.jam - this is set in the installation_modules function
 #####################################################################################################################################################
@@ -383,7 +408,7 @@ custom_flags_set() {
 # This function creates our _curl function that we use throughout this script.
 #####################################################################################################################################################
 _curl() {
-	if [[ -z "$curl_proxy" ]]; then
+	if [[ -z $curl_proxy ]]; then
 		"$(type -P curl)" -sNL4fq --connect-timeout 5 --retry 5 --retry-delay 10 --retry-max-time 60 "$@"
 	else
 		"$(type -P curl)" -sNL4fq --connect-timeout 5 --retry 5 --retry-delay 10 --retry-max-time 60 --proxy-insecure ${curl_proxy} "$@"
@@ -393,9 +418,9 @@ _curl() {
 github_latest_version() {
 	# Argument expects the author/repo format that has a vlaid release url.
 	# e.g. boostorg/boost
-	if [[ -n "$1" ]]; then
+	if [[ -n $1 ]]; then
 		url_effective="$(_curl -SI -o /dev/null -w "%{url_effective}" "https://github.com/${1}/releases/latest")"
-		if [[ "${url_effective##*/}" == "releases" ]]; then
+		if [[ ${url_effective##*/} == "releases" ]]; then
 			printf '%s\n' "error:github_latest_version"
 		else
 			printf '%s\n' "${url_effective##*/}"
@@ -409,8 +434,8 @@ github_latest_version() {
 # If nothing is specified or the switch is not used it defaults to the hard-coded ~/libtorrent-python
 #####################################################################################################################################################
 set_build_directory() {
-	if [[ -n "$build_dir" ]]; then
-		if [[ "$build_dir" =~ ^/ ]]; then
+	if [[ -n $build_dir ]]; then
+		if [[ $build_dir =~ ^/ ]]; then
 			install_dir="$build_dir"
 		else
 			install_dir="${HOME}/${build_dir}"
@@ -430,12 +455,19 @@ set_build_directory() {
 # boost url function
 #####################################################################################################################################################
 boost_url() {
-	boost_github_tag="$(github_latest_version boostorg/boost)"
 	boost_version="${boost_github_tag/boost-/}"
+
+	local boost_asset_type="release"
+	local boost_archiveio_asset="${boost_github_tag//[-\.]/_}"
+
+	if [[ ${boost_github_tag} =~ \.beta ]]; then
+		boost_asset_type="beta"
+		boost_archiveio_asset="${boost_archiveio_asset/_beta/_b}"
+	fi
 
 	local boost_url_array=(
 		"https://github.com/boostorg/boost/releases/download/${boost_github_tag}/${boost_github_tag}-b2-nodocs.tar.xz"
-		"https://archives.boost.io/release/${boost_github_tag/boost-/}/source/${boost_github_tag//[-\.]/_}.tar.gz"
+		"https://archives.boost.io/${boost_asset_type}/${boost_github_tag#boost-}/source/${boost_archiveio_asset}.tar.gz"
 	)
 
 	for url in "${boost_url_array[@]}"; do
@@ -449,6 +481,7 @@ boost_url() {
 		fi
 	done
 }
+
 #####################################################################################################################################################
 # This function is where we set your URL that we use with other functions.
 #####################################################################################################################################################
@@ -459,14 +492,19 @@ set_module_urls() {
 	wolfssl_github_tag="$(github_latest_version "wolfSSL/wolfssl")"
 	wolfssl_github_url="https://github.com/wolfSSL/wolfssl.git"
 
+	if [[ -z ${boost_github_tag} ]]; then
+		boost_github_tag="$(github_latest_version boostorg/boost)"
+	fi
+
 	boost_url
+
 	boost_github_url="https://github.com/boostorg/boost.git"
 
 	libtorrent_github_url="https://github.com/arvidn/libtorrent.git"
 
-	if [[ "$valid_libtorrent_git_tag" = "yes" ]]; then
-		libtorrent_github_tag="$libtorrent_git_tag"
-	elif [[ "$libtorrent_git_tag" = "lm_master" ]]; then
+	if [[ $valid_libtorrent_github_tag == "yes" ]]; then
+		libtorrent_github_tag="$libtorrent_github_tag"
+	elif [[ $libtorrent_github_tag == "lm_master" ]]; then
 		libtorrent_github_tag="RC_${libtorrent_version//./_}"
 	else
 		libtorrent_github_tag=$(github_latest_version "arvidn/libtorrent")
@@ -482,8 +520,8 @@ set_libtorrent_crypto() {
 	pb_libtorrent_crypto=("crypto=openssl" "openssl-lib=$install_dir/openssl-$openssl_github_tag" "openssl-include=$install_dir/openssl-$openssl_github_tag/include")
 	ssl_module="openssl"
 
-	if [[ "$crypto_type" = 'wolfssl' ]]; then
-		if [[ "$libtorrent_github_tag" =~ ^(RC_2_[0-9]|v2[\.0-9]{2,3}[\.0-9]{2,2})$ ]]; then
+	if [[ $crypto_type == 'wolfssl' ]]; then
+		if [[ $libtorrent_github_tag =~ ^(RC_2_[0-9]|v2[\.0-9]{2,3}[\.0-9]{2,2})$ ]]; then
 			pb_libtorrent_crypto=("crypto=wolfssl" "wolfssl-lib=$install_dir/wolfssl/src/.libs" "wolfssl-include=$install_dir/wolfssl")
 			ssl_module="wolfssl"
 		else
@@ -492,7 +530,7 @@ set_libtorrent_crypto() {
 			echo
 			echo -e "${td} This script defaults to the v1.2 latest version${cend}"
 			echo
-			echo -e "${cg} ~/${script_basename}${cend} ${clm}all${cend} ${clb}-c${cend} ${clm}wolfssl${cend} ${clb}-lt${cend} ${cc}RC_2_0${cend}"
+			echo -e "${cg} ~/${script_parent_path}${cend} ${clm}all${cend} ${clb}-c${cend} ${clm}wolfssl${cend} ${clb}-lt${cend} ${cc}RC_2_0${cend}"
 			echo
 			exit
 		fi
@@ -505,7 +543,7 @@ set_default_values() {
 	working_dir="$(printf "%s" "$(pwd <(dirname "$0"))")"                 # Get the full path to the scripts location to use with setting some path related variables.
 	modules=("all" "install_deluge" "${ssl_module}" "boost" "libtorrent") # Define our list of available modules in an array.
 	scope="${scope:-user}"                                                # We can define the libtorrent installation settings for the b2 command here.
-	if [[ "$scope" = 'none' ]]; then
+	if [[ $scope == 'none' ]]; then
 		LIBTORRENT_INSTALL_DIR="" # Just use stage_module to copy the libtorrent.so to the completed directory.
 	else
 		LIBTORRENT_INSTALL_DIR="install_module python-install-scope=${scope}" # Use these commands to install the libtorrent.so.
@@ -516,17 +554,23 @@ set_default_values() {
 # This function allows you to test the compiled libraries to make sure they work.
 #####################################################################################################################################################
 test_library_builds() {
-	if [[ "$test_build" = 'yes' ]]; then
+	if [[ $test_build == 'yes' ]]; then
+
 		installed_scope_system="$(python3 -c "import distutils.sysconfig; import sys; sys.stdout.write(distutils.sysconfig.get_python_lib())")/libtorrent.so"
 		installed_scope_local="$(python3 -c "import site; import sys; sys.stdout.write(site.USER_SITE)")/libtorrent.so"
 		installed_scope_none="$install_dir/completed/libtorrent.so"
-		#
-		echo
-		#
+
+		printf '\n'
+
 		test_library() {
-			if [[ ${1} = "${installed_scope_system}" || ${1} = "${installed_scope_local}" || ${1} = "${installed_scope_none}" ]]; then
+			if [[ ${1} == "${installed_scope_system}" || ${1} == "${installed_scope_local}" || ${1} == "${installed_scope_none}" ]]; then
+
 				echo -e "libtorrent location${cend}${td}:${cend} ${cc}${1}${cend}${tn}"
-				[[ "${1}" = "${installed_scope_none}" ]] && cd "$install_dir/completed" || exit
+
+				if [[ ${1} == "${installed_scope_none}" ]]; then
+					cd "$install_dir/completed"
+				fi
+
 				if python3 -c "import libtorrent; print(libtorrent.version)" > /dev/null 2>&1; then
 					echo -e " ${clb}Using python3${cend} - ${cy}libtorrent version${cend}${td}:${cend} ${cg}$(python3 -c "import libtorrent; print(libtorrent.version)")${cend}${tn}"
 				else
@@ -535,10 +579,11 @@ test_library_builds() {
 				fi
 			fi
 		}
-		[[ -f "${installed_scope_system}" ]] && test_library "${installed_scope_system}"
-		[[ -f "${installed_scope_local}" ]] && test_library "${installed_scope_local}"
-		[[ -f "${installed_scope_none}" ]] && test_library "${installed_scope_none}"
-		#
+
+		[[ -f ${installed_scope_system} ]] && test_library "${installed_scope_system}"
+		[[ -f ${installed_scope_local} ]] && test_library "${installed_scope_local}"
+		[[ -f ${installed_scope_none} ]] && test_library "${installed_scope_none}"
+
 		if [[ ! -f ${installed_scope_system} && ! -f ${installed_scope_local} && ! -f ${installed_scope_none} ]]; then
 			echo -e "Sorry, but I cannot find an installed libtorrent.so library."
 			echo
@@ -552,25 +597,24 @@ test_library_builds() {
 # This function verifies the module names from the array modules in the default values function.
 #####################################################################################################################################################
 installation_modules() {
-	params_count="$#"
-	params_test=1
+	# Delete modules - using the modules_delete array to unset them from the modules_install array
+	for md in "${!modules_delete[@]}"; do
+		if [[ ${modules_delete["$md"]} == "true" ]]; then
+			unset "modules_install[${md}]"
+		fi
+	done && unset md
 
-	while [[ "$params_test" -le "$params_count" && "$params_count" -gt '1' ]]; do
-		if [[ ! "${modules[*]}" =~ ${*:$params_test:1} ]]; then
+	# For any modules params passed, test that they exist in the modules_install array or set modules_test to fail
+	for passed_params in "${@}"; do
+		if [[ ! ${!modules_install[*]} =~ ([[:space:]]|^)(${passed_params})([[:space:]]|$) ]]; then
 			modules_test="fail"
 		fi
-		params_test="$((params_test + 1))"
 	done
-
-	if [[ "$params_count" -le '1' ]]; then
-		if [[ ! "${modules[*]}" =~ ${*:$params_test:1} && -n "${*:$params_test:1}" ]]; then
-			modules_test="fail"
-		fi
-	fi
+	unset passed_params
 
 	# Activate all validated modules for installation and define some core variables.
-	if [[ "$modules_test" != 'fail' ]]; then
-		if [[ "${*}" =~ ([[:space:]]|^)all([[:space:]]|$) ]]; then
+	if [[ ${modules_test} != 'fail' && ${#} -ne '0' ]]; then
+		if [[ ${*} =~ ([[:space:]]|^)all([[:space:]]|$) ]]; then
 			for module in "${modules[@]}"; do
 				eval "skip_${module}=no"
 			done
@@ -598,7 +642,7 @@ installation_modules() {
 		echo -e "${tn}${tb}Install Prefix${cend} : ${cg}$install_dir${cend}"
 		#
 		## Some basic help
-		echo -e "${tn}${tb}Script help${cend} : ${cg}~/${script_basename} -h${cend}"
+		echo -e "${tn}${tb}Script help${cend} : ${cg}~/${script_parent_path} -h${cend}"
 	else
 		echo -e "${cr}${tn}One or more of the provided modules are not supported${cend}"
 		echo -e "${tb}${tn}This is a list of supported modules${cend}"
@@ -612,9 +656,9 @@ installation_modules() {
 apply_patches() {
 	[[ -d "$install_dir/patches" ]] && rm -rf "$install_dir/patches"
 
-	[[ "$libtorrent_github_tag" =~ ^(libtorrent-1_1_[0-9]{1,2}|RC_1_1) ]] && libtorrent_patch_github_tag="RC_1_1"
-	[[ "$libtorrent_github_tag" =~ ^(libtorrent-1_2_[0-9]{1,2}|RC_1_2|v1.2\.[0-9]{1,2})$ ]] && libtorrent_patch_github_tag="RC_1_2"
-	[[ "$libtorrent_github_tag" =~ ^(RC_2_0|v2\.[0-9](\.[0-9]{1,2})?)$ ]] && libtorrent_patch_github_tag="RC_2_0"
+	[[ $libtorrent_github_tag =~ ^(libtorrent-1_1_[0-9]{1,2}|RC_1_1) ]] && libtorrent_patch_github_tag="RC_1_1"
+	[[ $libtorrent_github_tag =~ ^(libtorrent-1_2_[0-9]{1,2}|RC_1_2|v1.2\.[0-9]{1,2})$ ]] && libtorrent_patch_github_tag="RC_1_2"
+	[[ $libtorrent_github_tag =~ ^(RC_2_0|v2\.[0-9](\.[0-9]{1,2})?)$ ]] && libtorrent_patch_github_tag="RC_2_0"
 
 	patches_github_url="https://raw.githubusercontent.com/userdocs/python-libtorrent-binding/master/patches/$libtorrent_patch_github_tag/Jamfile"
 
@@ -634,9 +678,9 @@ install_deluge() {
 	if [[ $os_id =~ ^(debian|ubuntu)$ ]]; then
 		printf '\n%b\n\n' "${unicode_blue_circle} Installing deluge via pip"
 		pip install --user deluge --break-system-packages
-	elif [[ $os_id = "alpine" ]]; then
+	elif [[ $os_id == "alpine" ]]; then
 		printf '\n%b\n\n' "${unicode_blue_circle} Installing deluge via apk"
-		apk add --no-cache deluge
+		"${command_install_deps[@]}" deluge
 	fi
 
 	for d in $(pgrep deluge); do kill -9 $d; done
@@ -646,20 +690,23 @@ install_deluge() {
 	chmod 700 "$HOME/.config/deluge/plugins/ltConfig-${ltconfig_version}.egg"
 
 	set +e # deluge-console plugin -e ltconfig is bugged and causes some error even though it works
+
 	if [[ $os_id =~ ^(debian|ubuntu)$ ]]; then
 		"$HOME/.local/bin/deluged"
 		"$HOME/.local/bin/deluge-console" plugin -e ltconfig &> /dev/null
 		"$HOME/.local/bin/deluge-web"
-	elif [[ $os_id = "alpine" ]]; then
+	elif [[ $os_id == "alpine" ]]; then
 		deluged
 		deluge-web
 		deluge-console plugin -e ltconfig &> /dev/null
 	fi
 
+	if [[ $os_id =~ ^(debian|ubuntu)$ ]]; then binary_path="~/.local/bin/"; fi
+
 	printf '%b\n\n' "${cg}${tn}The libtorrent python binding has been installed and started using these commands!${cend}"
-	printf '%b\n' "${cc}~/.local/bin/deluged${cend}"
-	printf '%b\n' "${cc}~/.local/bin/deluge-console plugin -e ltconfig${cend}"
-	printf '%b\n\n' "${cc}~/.local/bin/deluge-web${cend}"
+	printf '%b\n' "${cc}${binary_path}deluged${cend}"
+	printf '%b\n' "${cc}${binary_path}deluge-console plugin -e ltconfig${cend}"
+	printf '%b\n\n' "${cc}${binary_path}deluge-web${cend}"
 
 	exit
 }
@@ -667,12 +714,13 @@ install_deluge() {
 # This function is for downloading source code archives
 #####################################################################################################################################################
 download_file() {
-	if [[ -n "$1" ]]; then
+	if [[ -n $1 ]]; then
 		url_filename="${2}"
-		[[ -n "$3" ]] && subdir="/$3" || subdir=""
-		echo -e "${tn}${cg}Installing $1${cend}${tn}"
+		[[ -n $3 ]] && subdir="/$3" || subdir=""
+		github_tag_var="${1}_github_tag"
+		echo -e "${tn}${cg}Installing $1${cend} ${!github_tag_var}${tn}"
 		file_name="$install_dir/$1.tar.gz"
-		[[ -f "$file_name" ]] && rm -rf {"${install_dir:?}/$(tar tf "$file_name" | grep -Eom1 "(.*)[^/]")","$file_name"}
+		[[ -f $file_name ]] && rm -rf "${install_dir:?}/$(tar tf "$file_name" | grep -Eom1 "(.*)[^/]")" "$file_name"
 		_curl "${url_filename}" -o "$file_name"
 		dir_to_move="${install_dir:?}/$(tar tf "$file_name" | grep -Eom1 "(.*)[^/]")"
 		tar xf "$file_name" -C "$install_dir"
@@ -692,13 +740,13 @@ download_file() {
 # This function is for downloading git releases based on their tag.
 #####################################################################################################################################################
 download_folder() {
-	if [[ -n "$1" ]]; then
+	if [[ -n $1 ]]; then
 		github_tag="${1}_github_tag"
 		url_github="${2}"
-		[[ -n "$3" ]] && subdir="/$3" || subdir=""
+		[[ -n $3 ]] && subdir="/$3" || subdir=""
 		echo -e "${tn}${cg}Installing $1${cend}${tn}"
 		folder_name="$install_dir/$1"
-		[[ -d "$folder_name" ]] && rm -rf "$folder_name"
+		[[ -d $folder_name ]] && rm -rf "$folder_name"
 		git ${git_proxy} clone --no-tags --single-branch --branch "${!github_tag}" --shallow-submodules --recurse-submodules -j"$(nproc)" --depth 1 "${url_github}" "${folder_name}"
 		mkdir -p "${folder_name}${subdir}"
 		cd "${folder_name}${subdir}" || exit
@@ -716,17 +764,17 @@ download_folder() {
 # This function is for removing files and folders we no longer need
 #####################################################################################################################################################
 delete_function() {
-	if [[ -n "$1" ]]; then
-		if [[ -z "$skip_delete" ]]; then
-			[[ "$2" = 'last' ]] && echo -e "${tn}${clr}Deleting $1 installation files and folders${cend}${tn}" || echo -e "${tn}${clr}Deleting $1 installation files and folders${cend}"
+	if [[ -n $1 ]]; then
+		if [[ -z $skip_delete ]]; then
+			[[ $2 == 'last' ]] && echo -e "${tn}${clr}Deleting $1 installation files and folders${cend}${tn}" || echo -e "${tn}${clr}Deleting $1 installation files and folders${cend}"
 			#
 			file_name="$install_dir/$1.tar.gz"
 			folder_name="$install_dir/$1"
-			[[ -f "$file_name" ]] && rm -rf {"${install_dir:?}/$(tar tf "$file_name" | grep -Eom1 "(.*)[^/]")","$file_name"}
-			[[ -d "$folder_name" ]] && rm -rf "$folder_name"
+			[[ -f $file_name ]] && rm -rf {"${install_dir:?}/$(tar tf "$file_name" | grep -Eom1 "(.*)[^/]")","$file_name"}
+			[[ -d $folder_name ]] && rm -rf "$folder_name"
 			cd "$working_dir" || exit
 		else
-			[[ "$2" = 'last' ]] && echo -e "${tn}${clr}Skipping $1 deletion${cend}${tn}" || echo -e "${tn}${clr}Skipping $1 deletion${cend}"
+			[[ $2 == 'last' ]] && echo -e "${tn}${clr}Skipping $1 deletion${cend}${tn}" || echo -e "${tn}${clr}Skipping $1 deletion${cend}"
 		fi
 	else
 		echo
@@ -752,7 +800,7 @@ application_name() {
 # This function skips the deletion of the -n flag is supplied
 #####################################################################################################################################################
 application_skip() {
-	if [[ "$1" = 'last' ]]; then
+	if [[ $1 == 'last' ]]; then
 		echo -e "${tn}Skipping ${clm}$app_name${cend} module installation${tn}"
 	else
 		echo -e "${tn}Skipping ${clm}$app_name${cend} module installation"
@@ -768,7 +816,7 @@ while (("$#")); do
 			shift 2
 			;;
 		-c | --crypto)
-			if [[ ! "$2" =~ ^(openssl|wolfssl)$ ]]; then
+			if [[ ! $2 =~ ^(openssl|wolfssl)$ ]]; then
 				echo
 				echo -e "${cy}I don't know this crypto type. Valid options are${cend} ${clm}openssl${cend} ${cy}and${cend} ${clm}wolfssl${cend}"
 				echo
@@ -783,13 +831,19 @@ while (("$#")); do
 			shift
 			;;
 		-lm | --libtorrent-master)
-			libtorrent_git_tag='lm_master'
+			libtorrent_github_tag='lm_master'
 			shift
 			;;
 		-lt | --libtorrent-tag)
 			if git ls-remote --exit-code "https://github.com/arvidn/libtorrent.git" -t "$2" > /dev/null 2>&1; then
-				valid_libtorrent_git_tag="yes"
-				libtorrent_git_tag="$2"
+				valid_libtorrent_github_tag="yes"
+				libtorrent_github_tag="$2"
+
+				if [[ ${libtorrent_github_tag} =~ ^(v1\.2\.|RC_1_2) ]]; then
+					boost_github_tag="boost-1.86.0"
+					boost_url
+				fi
+
 				echo
 				echo -e "${cy}Libtorrent tag${cend} ${cg}$2${cend} ${cy}verified!${cend}"
 			else
@@ -811,7 +865,7 @@ while (("$#")); do
 			;;
 		-s | --scope)
 			scope="${2:-user}"
-			if [[ ! "$scope" =~ ^(none|user|system)$ ]]; then
+			if [[ ! $scope =~ ^(none|user|system)$ ]]; then
 				echo
 				set_build_directory
 				echo
@@ -836,21 +890,22 @@ while (("$#")); do
 			printf '%b\n' " ${cg}Use:${cend} ${clb}-tb${cend} ${td}or${cend} ${clb}--test-build${cend}        ${cy}Help:${cend} ${clb}-h-tb${cend} ${td}or${cend} ${clb}--help-test-build${cend}"
 			printf '%b\n\n' " ${cg}Use:${cend} ${clb}-s${cend}  ${td}or${cend} ${clb}--scope${cend}             ${cy}Help:${cend} ${clb}-h-s${cend}  ${td}or${cend} ${clb}--help-scope${cend}"
 			printf '%b\n\n' "${tb}${tu}Module specific help - flags are used with the modules listed here.${cend}"
-			printf '%b\n\n' "${cg}Use:${cend} ${clm}all${cend} ${td}or${cend} ${clm}module-name${cend}         ${cy}Usage:${cend} ${cg}~/${script_basename}${cend} ${clm}all${cend}"
+			printf '%b\n\n' "${cg}Use:${cend} ${clm}all${cend} ${td}or${cend} ${clm}module-name${cend}         ${cy}Usage:${cend} ${cg}~/${script_parent_path}${cend} ${clm}all${cend}"
 
 			printf '%b\n\n' "${tb}${tu}Here are a list of dependency specific modules${cend}"
 
 			printf '%b\n' " ${clm}update${cend}${td} --------- ${cend}${td}update host - apt/apk update${cend}"
-			printf '%b\n' " ${clm}install${cend}${td} -------- ${cend}${td}Install dependencies${cend}"
-			printf '%b\n' " ${clm}bootstrap${cend}${td} ------ ${cend}${td}update and install combined${cend}"
+			printf '%b\n' " ${clm}install_test${cend}${td} --- ${cend}${td}Install test features dependencies${cend}"
+			printf '%b\n' " ${clm}install_core${cend}${td} --- ${cend}${td}Install core build dependencies${cend}"
+			printf '%b\n' " ${clm}bootstrap_deps${cend}${td} - ${cend}${td}update + install_test + install_core${cend}"
 			printf '%b\n' " ${clm}install_deluge${cend}${td} - ${cend}${td}pip install deluge${cend}"
 
 			printf '\n%b\n\n' "${tb}${tu}Here are a list of build specific modules${cend}"
-			printf '%b\n' " ${clm}all${cend}${td} ---------- ${cend}${td}Install all modules - openssl boost libtorrent${cend}"
-			printf '%b\n' " ${clm}openssl${cend}${td} ------ ${cend}${td}Install the openssl module${cend} ${cy}(default)${cend}"
-			printf '%b\n' " ${clm}wolfssl${cend}${td} ------ ${cend}${td}Install the wolf module${cend} ${cy}(Libtorrent v2 only)${cend}"
-			printf '%b\n' " ${clm}boost${cend}${td} -------- ${cend}${td}Download, extract and bootstrap the boost build files${cend}"
-			printf '%b\n\n' " ${clm}libtorrent${cend}${td} --- ${cend}${td}Build the libtorrent python binding${cend}"
+			printf '%b\n' " ${clm}all${cend}${td} ----------- ${cend}${td}Install all modules - openssl boost libtorrent${cend}"
+			printf '%b\n' " ${clm}openssl${cend}${td} ------- ${cend}${td}Install the openssl module${cend} ${cy}(default)${cend}"
+			printf '%b\n' " ${clm}wolfssl${cend}${td} ------- ${cend}${td}Install the wolf module${cend} ${cy}(Libtorrent v2 only)${cend}"
+			printf '%b\n' " ${clm}boost${cend}${td} --------- ${cend}${td}Download, extract and bootstrap the boost build files${cend}"
+			printf '%b\n\n' " ${clm}libtorrent${cend}${td} ---- ${cend}${td}Build the libtorrent python binding${cend}"
 			exit 1
 			;;
 		-h-b | --help-build-directory)
@@ -863,13 +918,13 @@ while (("$#")); do
 			echo
 			echo -e " ${cy}Paths are relative to the script location. I recommend that you use a full path.${cend}"
 			echo
-			echo -e " ${td}Example:${cend} ${cg}~/${script_basename}${cend} ${clm}all${cend} ${td}- Will install all modules and build libtorrent to the default build location"${cend}
+			echo -e " ${td}Example:${cend} ${cg}~/${script_parent_path}${cend} ${clm}all${cend} ${td}- Will install all modules and build libtorrent to the default build location"${cend}
 			echo
-			echo -e " ${td}Example:${cend} ${cg}~/${script_basename}${cend} ${clm}all ${clb}-b${cend} \"\$HOME/build\"${cend} ${td}- Will specify a build directory and install all modules to that custom location${cend}"
+			echo -e " ${td}Example:${cend} ${cg}~/${script_parent_path}${cend} ${clm}all ${clb}-b${cend} \"\$HOME/build\"${cend} ${td}- Will specify a build directory and install all modules to that custom location${cend}"
 			echo
-			echo -e " ${td}Example:${cend} ${cg}~/${script_basename}${cend} ${clm}module${cend} ${td}- Will install a single module to the default build location${cend}"
+			echo -e " ${td}Example:${cend} ${cg}~/${script_parent_path}${cend} ${clm}module${cend} ${td}- Will install a single module to the default build location${cend}"
 			echo
-			echo -e " ${td}Example:${cend} ${cg}~/${script_basename}${cend} ${clm}module${cend} ${clb}-b${cend} \"\$HOME/build\"${cend} ${td}- will specify a custom build directory and install a specific module use to that custom location${cend}"
+			echo -e " ${td}Example:${cend} ${cg}~/${script_parent_path}${cend} ${clm}module${cend} ${clb}-b${cend} \"\$HOME/build\"${cend} ${td}- will specify a custom build directory and install a specific module use to that custom location${cend}"
 			echo
 			exit 1
 			;;
@@ -925,8 +980,8 @@ while (("$#")); do
 			echo
 			echo -e " ${cy}You can use this flag with this help command to see the value if called before the help option.${cend}"
 			echo
-			echo -e " ${cg}~/${script_basename}${cend}${clb} -lt ${clc}12345${cend} ${clb}-h-lt${cend}"
-			[[ -n "$libtorrent_git_tag" ]] && echo -e "${tn} This tag that will be used is: ${cg}$libtorrent_git_tag${cend}"
+			echo -e " ${cg}~/${script_parent_path}${cend}${clb} -lt ${clc}12345${cend} ${clb}-h-lt${cend}"
+			[[ -n $libtorrent_github_tag ]] && echo -e "${tn} This tag that will be used is: ${cg}$libtorrent_github_tag${cend}"
 			echo
 			echo -e " ${td}This flag must be provided with arguments.${cend}"
 			echo
@@ -944,10 +999,10 @@ while (("$#")); do
 			echo
 			echo -e " ${cy}You can use this flag with this help command to see the value if called before the help option:${cend}"
 			echo
-			echo -e " ${cg}~/${script_basename}${cend} ${clb}-p${cend} ${clc}https://proxy.com:12345${cend} ${clb}-h-p${cend}"
+			echo -e " ${cg}~/${script_parent_path}${cend} ${clb}-p${cend} ${clc}https://proxy.com:12345${cend} ${clb}-h-p${cend}"
 			echo
-			[[ -n "$git_proxy" ]] && echo -e " git proxy command: $git_proxy"
-			[[ -n "$curl_proxy" ]] && echo -e " curl proxy command: $curl_proxy${tn}"
+			[[ -n $git_proxy ]] && echo -e " git proxy command: $git_proxy"
+			[[ -n $curl_proxy ]] && echo -e " curl proxy command: $curl_proxy${tn}"
 			exit 1
 			;;
 		-h-tb | --help-test-build)
@@ -1003,19 +1058,19 @@ eval set -- "$PARAMS" # Set positional arguments in their proper place.
 #####################################################################################################################################################
 # Use our functions
 #####################################################################################################################################################
-set_build_directory                                                              # see functions
-set_module_urls                                                                  # see functions
-set_libtorrent_crypto                                                            # see functions
-set_default_values                                                               # see functions
-test_library_builds                                                              # see functions
-installation_modules "$@"                                                        # see functions
-[[ "${*}" =~ ([[:space:]]|^)"install_deluge"([[:space:]]|$) ]] && install_deluge # see functions
+set_build_directory                                                            # see functions
+set_module_urls                                                                # see functions
+set_libtorrent_crypto                                                          # see functions
+set_default_values                                                             # see functions
+test_library_builds                                                            # see functions
+installation_modules "$@"                                                      # see functions
+[[ ${*} =~ ([[:space:]]|^)"install_deluge"([[:space:]]|$) ]] && install_deluge # see functions
 #####################################################################################################################################################
 # openssl installation
 #####################################################################################################################################################
 application_name openssl
 
-if [[ "${!app_name_skip:-yes}" = 'no' || "$1" = "$app_name" ]]; then
+if [[ ${!app_name_skip:-yes} == 'no' || $1 == "$app_name" ]]; then
 	custom_flags_set
 	download_file "$app_name" "${!app_url}"
 
@@ -1029,7 +1084,7 @@ fi
 #####################################################################################################################################################
 application_name wolfssl
 #
-if [[ "${!app_name_skip:-yes}" = 'no' || "$1" = "$app_name" ]]; then
+if [[ ${!app_name_skip:-yes} == 'no' || $1 == "$app_name" ]]; then
 	custom_flags_set
 	download_folder "$app_name" "${!app_github_url}"
 	#
@@ -1045,18 +1100,18 @@ fi
 #####################################################################################################################################################
 application_name boost
 
-if [[ "${!app_name_skip:-yes}" = 'no' ]] || [[ "$1" = "$app_name" ]]; then
+if [[ ${!app_name_skip:-yes} == 'no' ]] || [[ $1 == "$app_name" ]]; then
 	custom_flags_set
 
 	[[ -d "$install_dir/boost" ]] && delete_function "$app_name"
 
-	if [[ "$boost_url_status" -eq '200' ]]; then
+	if [[ $boost_url_status -eq '200' ]]; then
 		download_file "$app_name" "$boost_url"
 		mv -f "${dir_to_move}" "$install_dir/boost"
 		cd "$install_dir/boost" || exit
 	fi
 
-	if [[ "$boost_url_status" -eq '403' ]]; then
+	if [[ $boost_url_status -eq '403' ]]; then
 		download_folder "$app_name" "${!app_github_url}"
 	fi
 
@@ -1070,7 +1125,7 @@ fi
 #####################################################################################################################################################
 application_name libtorrent
 
-if [[ "${!app_name_skip:-yes}" = 'no' ]] || [[ "$1" = "$app_name" ]]; then
+if [[ ${!app_name_skip:-yes} == 'no' ]] || [[ $1 == "$app_name" ]]; then
 	if [[ ! -d "$install_dir/boost" ]]; then
 		echo -e "${tn}${clr}Warning${cend} - You must install the boost module before you can use the libtorrent module"
 	else
